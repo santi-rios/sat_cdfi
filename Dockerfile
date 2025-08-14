@@ -8,6 +8,14 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
+    libglib2.0-0 \
+    libgobject-2.0-0 \
+    libgirepository-1.0-1 \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libgdk-pixbuf-2.0-0 \
+    libffi-dev \
+    shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar archivos de requirements

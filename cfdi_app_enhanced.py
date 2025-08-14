@@ -9,7 +9,6 @@ import tempfile
 import io
 from PyPDF2 import PdfMerger
 from satcfdi.cfdi import CFDI
-from satcfdi import render
 
 # Configuración de la página
 st.set_page_config(
@@ -40,11 +39,11 @@ def process_xml_files_enhanced(uploaded_files, file_type):
             
             # Procesar con satcfdi
             cfdi = CFDI.from_string(xml_content)
-            json_data = json.loads(render.json_str(cfdi))
+            json_data = json.loads(cfdi.json_str())
             
             # Generar PDF del CFDI
             try:
-                pdf_bytes = render.pdf_bytes(cfdi)
+                pdf_bytes = cfdi.pdf_bytes()
                 all_pdfs.append({
                     'filename': uploaded_file.name.replace('.xml', '.pdf'),
                     'content': pdf_bytes

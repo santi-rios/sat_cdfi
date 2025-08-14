@@ -4,7 +4,7 @@ services:
   cfdi-processor:
     build: .
     ports:
-      - "8502:8501"
+      - "8501:8501"
     volumes:
       - ./uploads:/tmp/uploads
       - ./output:/app/output
