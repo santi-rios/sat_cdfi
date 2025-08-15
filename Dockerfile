@@ -1,5 +1,5 @@
 # Dockerfile para Procesador de CFDIs
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 # Establecer directorio de trabajo
 WORKDIR /app
@@ -8,6 +8,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
+    git \
     libglib2.0-0 \
     libgobject-2.0-0 \
     libgirepository-1.0-1 \
