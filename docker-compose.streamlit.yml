@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  cfdi-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    ports:
+      - "8501:8501"
+    volumes:
+      # Para persistir archivos subidos (opcional)
+      - ./data:/app/data
+    environment:
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+    restart: unless-stopped
+    networks:
+      - cfdi-network
+
+networks:
+  cfdi-network:
+    driver: bridge
+
+# Si quieres conectar con otros servicios, usa:
+# networks:
+#   default:
+#     external: true
+#     name: tu_red_existente

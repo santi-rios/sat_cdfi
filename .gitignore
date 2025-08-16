@@ -1,8 +1,13 @@
-.venv/bin/activate
-.venv/bin/activate.csh
-.venv/bin/activate.fish
-.venv/bin/Activate.ps1
-.venv/bin/debugpy
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 .venv/bin/debugpy-adapter
 .venv/bin/f2py
 .venv/bin/fonttools
