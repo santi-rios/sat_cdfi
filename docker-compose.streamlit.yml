@@ -16,15 +16,15 @@ services:
       - STREAMLIT_SERVER_HEADLESS=true
       - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
     restart: unless-stopped
-    networks:
-      - cfdi-network
+    # networks:
+    #   - cfdi-network
 
-networks:
-  cfdi-network:
-    driver: bridge
+# networks:
+#   cfdi-network:
+#     driver: bridge
 
 # Si quieres conectar con otros servicios, usa:
-# networks:
-#   default:
-#     external: true
-#     name: tu_red_existente
+networks:
+  default:
+    external: true
+    name: docker_default
