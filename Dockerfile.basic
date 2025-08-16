@@ -1,0 +1,29 @@
+# Dockerfile simple sin WeasyPrint para pruebas rápidas
+FROM python:3.11-slim
+
+# Establecer directorio de trabajo
+WORKDIR /app
+
+# Instalar dependencias básicas del sistema
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar requirements básicos (sin weasyprint)
+COPY requirements-basic.txt ./requirements.txt
+
+# Instalar dependencias Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar código de la aplicación
+COPY . .
+
+# Crear directorio para datos
+RUN mkdir -p /app/data
+
+# Exponer puerto
+EXPOSE 8501
+
+# Comando para correr la aplicación
+CMD ["streamlit", "run", "cfdi_app_enhanced.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]

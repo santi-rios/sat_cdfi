@@ -709,7 +709,11 @@ def create_data_calculator_ui(df, prefix=""):
             st.write("**Filtros para el cálculo:**")
             
             # Filtro por RFC Emisor (el más importante para DIOT)
-            emisores_unicos = ['Todos'] + sorted(df['Emisor_RFC'].dropna().unique().tolist())
+            emisores_unicos = ['Todos'] + sorted([
+                f"{row['Emisor_RFC']} - {row['Emisor_Nombre']}" 
+                for _, row in df[['Emisor_RFC', 'Emisor_Nombre']].drop_duplicates().iterrows()
+                if pd.notna(row['Emisor_RFC']) and pd.notna(row['Emisor_Nombre'])
+            ])
             selected_emisor = st.selectbox(
                 "RFC Emisor:",
                 options=emisores_unicos,
@@ -717,7 +721,11 @@ def create_data_calculator_ui(df, prefix=""):
             )
             
             # Filtro por RFC Receptor
-            receptores_unicos = ['Todos'] + sorted(df['Receptor_RFC'].dropna().unique().tolist())
+            receptores_unicos = ['Todos'] + sorted([
+                f"{row['Receptor_RFC']} - {row['Receptor_Nombre']}" 
+                for _, row in df[['Receptor_RFC', 'Receptor_Nombre']].drop_duplicates().iterrows()
+                if pd.notna(row['Receptor_RFC']) and pd.notna(row['Receptor_Nombre'])
+            ])
             selected_receptor = st.selectbox(
                 "RFC Receptor:",
                 options=receptores_unicos,
@@ -749,10 +757,14 @@ def create_data_calculator_ui(df, prefix=""):
                 df_calc = df.copy()
                 
                 if selected_emisor != 'Todos':
-                    df_calc = df_calc[df_calc['Emisor_RFC'] == selected_emisor]
+                    # Extraer solo el RFC (antes del ' - ')
+                    rfc_emisor = selected_emisor.split(' - ')[0]
+                    df_calc = df_calc[df_calc['Emisor_RFC'] == rfc_emisor]
                 
                 if selected_receptor != 'Todos':
-                    df_calc = df_calc[df_calc['Receptor_RFC'] == selected_receptor]
+                    # Extraer solo el RFC (antes del ' - ')
+                    rfc_receptor = selected_receptor.split(' - ')[0]
+                    df_calc = df_calc[df_calc['Receptor_RFC'] == rfc_receptor]
                 
                 # Sin filtro de fechas por ahora
                 
@@ -1106,11 +1118,15 @@ def main():
                                 selected_claves.append(clave)
                     
                     if st.button("💾 Aplicar Configuración de Deducibilidad", key="apply_deduct_emit"):
-                        # Aplicar el filtro de deducibilidad
-                        st.session_state.df_emitidos = apply_deducibility_filter(
-                            st.session_state.df_emitidos, selected_claves
-                        )
-                        st.success(f"✅ Configuración aplicada: {len(selected_claves)} claves marcadas como deducibles")
+                        with st.spinner("Aplicando configuración..."):
+                            # Aplicar el filtro de deducibilidad
+                            st.session_state.df_emitidos = apply_deducibility_filter(
+                                st.session_state.df_emitidos, selected_claves
+                            )
+                            st.success(f"✅ Configuración aplicada: {len(selected_claves)} claves marcadas como deducibles")
+                            # Usar tiempo corto para evitar bucles infinitos
+                            import time
+                            time.sleep(0.5)
                         st.rerun()
             
             # Filtros de datos
@@ -1211,15 +1227,19 @@ def main():
                     for i, clave in enumerate(st.session_state.claves_recibidos):
                         col_idx = i % n_cols
                         with cols[col_idx]:
-                            if st.checkbox(f"� {clave}", key=f"clave_rec_{clave}"):
+                            if st.checkbox(f"🔑 {clave}", key=f"clave_rec_{clave}"):
                                 selected_claves.append(clave)
                     
                     if st.button("💾 Aplicar Configuración de Deducibilidad", key="apply_deduct_rec"):
-                        # Aplicar el filtro de deducibilidad
-                        st.session_state.df_recibidos = apply_deducibility_filter(
-                            st.session_state.df_recibidos, selected_claves
-                        )
-                        st.success(f"✅ Configuración aplicada: {len(selected_claves)} claves marcadas como deducibles")
+                        with st.spinner("Aplicando configuración..."):
+                            # Aplicar el filtro de deducibilidad
+                            st.session_state.df_recibidos = apply_deducibility_filter(
+                                st.session_state.df_recibidos, selected_claves
+                            )
+                            st.success(f"✅ Configuración aplicada: {len(selected_claves)} claves marcadas como deducibles")
+                            # Usar tiempo corto para evitar bucles infinitos
+                            import time
+                            time.sleep(0.5)
                         st.rerun()
             
             # Filtros de datos
@@ -1313,38 +1333,100 @@ def main():
                     total_egresos = df_consolidado['Egresos_Subtotal'].sum()
                     st.metric("Total Egresos", f"${total_egresos:,.2f}")
                 
-                # Gráfico mejorado (arreglando el error)
-                st.subheader("📈 Análisis por Mes y Categoría")
+                # Gráfico interactivo mejorado
+                st.subheader("📈 Análisis Temporal Interactivo")
                 
-                if 'Mes' in df_consolidado.columns and not df_consolidado['Mes'].isna().all():
-                    # Crear datos para el gráfico de forma más segura
-                    chart_data = df_consolidado.groupby(['Mes', 'Categoria']).agg({
-                        'Ingresos_Subtotal': 'sum',
-                        'Egresos_Subtotal': 'sum'
-                    }).reset_index()
+                # Convertir fechas para el gráfico
+                if 'Fecha' in df_consolidado.columns and not df_consolidado['Fecha'].isna().all():
+                    df_grafico = df_consolidado.copy()
                     
-                    # Crear gráfico usando plotly para mejor control
-                    import plotly.express as px
+                    # Convertir fecha a datetime
+                    df_grafico['Fecha_dt'] = pd.to_datetime(df_grafico['Fecha'], format='%d/%m/%Y', errors='coerce')
+                    df_grafico = df_grafico.dropna(subset=['Fecha_dt'])
                     
-                    # Crear datos para gráfico
-                    chart_melted = pd.melt(
-                        chart_data, 
-                        id_vars=['Mes', 'Categoria'], 
-                        value_vars=['Ingresos_Subtotal', 'Egresos_Subtotal'],
-                        var_name='Tipo', 
-                        value_name='Monto'
-                    )
-                    
-                    if not chart_melted.empty:
-                        fig = px.bar(
-                            chart_melted, 
-                            x='Mes', 
-                            y='Monto', 
-                            color='Categoria',
-                            facet_col='Tipo',
-                            title="Ingresos y Egresos por Mes y Categoría"
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
+                    if not df_grafico.empty:
+                        # Controles para el gráfico
+                        col_graf1, col_graf2 = st.columns(2)
+                        
+                        with col_graf1:
+                            metrica_grafico = st.selectbox(
+                                "¿Qué quieres visualizar?",
+                                options=[
+                                    "Ingresos_Subtotal",
+                                    "Egresos_Subtotal", 
+                                    "Ingresos_IVA",
+                                    "Egresos_IVA",
+                                    "Total_CFDI",
+                                    "Monto_Concepto"
+                                ],
+                                format_func=lambda x: {
+                                    "Ingresos_Subtotal": "💰 Ingresos (Subtotal)",
+                                    "Egresos_Subtotal": "💸 Egresos (Subtotal)",
+                                    "Ingresos_IVA": "📊 IVA Ingresos", 
+                                    "Egresos_IVA": "📊 IVA Egresos",
+                                    "Total_CFDI": "🧾 Total CFDIs",
+                                    "Monto_Concepto": "💵 Monto por Concepto"
+                                }.get(x, str(x))
+                            )
+                        
+                        with col_graf2:
+                            agrupar_por = st.selectbox(
+                                "Agrupar por:",
+                                options=["Día", "Semana", "Mes"],
+                                index=2  # Por defecto "Mes"
+                            )
+                        
+                        # Agrupar datos según selección
+                        if agrupar_por == "Día":
+                            df_grafico['Periodo'] = df_grafico['Fecha_dt'].dt.strftime('%Y-%m-%d')
+                        elif agrupar_por == "Semana":
+                            df_grafico['Periodo'] = df_grafico['Fecha_dt'].dt.to_period('W').astype(str)
+                        else:  # Mes
+                            df_grafico['Periodo'] = df_grafico['Fecha_dt'].dt.strftime('%Y-%m')
+                        
+                        # Crear datos agregados
+                        datos_agregados = df_grafico.groupby(['Periodo', 'Categoria']).agg({
+                            metrica_grafico: 'sum'
+                        }).reset_index()
+                        
+                        if not datos_agregados.empty:
+                            try:
+                                import plotly.express as px
+                                
+                                fig = px.line(
+                                    datos_agregados,
+                                    x='Periodo',
+                                    y=metrica_grafico,
+                                    color='Categoria',
+                                    title=f"Evolución de {metrica_grafico.replace('_', ' ')} por {agrupar_por}",
+                                    markers=True
+                                )
+                                
+                                # Mejorar el diseño
+                                fig.update_layout(
+                                    xaxis_title=f"Periodo ({agrupar_por})",
+                                    yaxis_title="Monto ($)",
+                                    hovermode='x unified'
+                                )
+                                
+                                st.plotly_chart(fig, use_container_width=True)
+                                
+                                # Gráfico adicional de barras
+                                fig_bar = px.bar(
+                                    datos_agregados,
+                                    x='Periodo',
+                                    y=metrica_grafico,
+                                    color='Categoria',
+                                    title=f"Comparación por {agrupar_por} - {metrica_grafico.replace('_', ' ')}",
+                                    barmode='group'
+                                )
+                                
+                                st.plotly_chart(fig_bar, use_container_width=True)
+                                
+                            except ImportError:
+                                st.warning("📊 Para gráficos avanzados, instala plotly: pip install plotly")
+                                # Gráfico básico con Streamlit
+                                st.line_chart(datos_agregados.set_index('Periodo')[metrica_grafico])
                 
                 # Tabla resumen
                 st.subheader("📋 Tabla Resumen")

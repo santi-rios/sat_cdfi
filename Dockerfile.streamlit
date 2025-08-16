@@ -1,23 +1,55 @@
-# Usar imagen base de Python
+# Usar imagen base de Python con más herramientas
 FROM python:3.11-slim
 
 # Establecer directorio de trabajo
 WORKDIR /app
 
-# Instalar dependencias del sistema
-RUN apt-get update && apt-get install -y \
+# Actualizar apt y instalar dependencias básicas
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     gcc \
     g++ \
+    pkg-config \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instalar dependencias para WeasyPrint en pasos separados
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libpangocairo-1.0-0 \
+    libgdk-pixbuf-2.0-0 \
+    libffi-dev \
+    libcairo2 \
+    libcairo2-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instalar dependencias de XML y fuentes
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libxml2-dev \
+    libxslt1-dev \
+    zlib1g-dev \
+    fonts-liberation \
+    fonts-dejavu-core \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements
 COPY requirements.txt .
+
+# Configurar variables de entorno para WeasyPrint
+ENV WEASYPRINT_DPI=96
+ENV FONTCONFIG_PATH=/etc/fonts
 
 # Instalar dependencias Python
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código de la aplicación
 COPY . .
+
+# Crear directorio para datos si no existe
+RUN mkdir -p /app/data
 
 # Exponer puerto
 EXPOSE 8501
