@@ -11,13 +11,34 @@ import time
 from PyPDF2 import PdfMerger
 from satcfdi.cfdi import CFDI
 from satcfdi import render
+
 # Importar DIOT desde satcfdi oficial
 try:
-    from satcfdi.diot import DIOT, DatosIdentificacion, Periodo, ProveedorTercero, TipoTercero, TipoOperacion, Pais, DatosComplementaria
+    from satcfdi.diot import (
+        DIOT,
+        DatosIdentificacion,
+        Periodo,
+        ProveedorTercero,
+        TipoTercero,
+        TipoOperacion,
+        Pais,
+        DatosComplementaria,
+    )
+
     DIOT_AVAILABLE = True
 except ImportError:
     # Fallback a nuestro modelo local si satcfdi.diot no está disponible
-    from diot_models import DIOT, DatosIdentificacion, Periodo, ProveedorTercero, TipoTercero, TipoOperacion, Pais, DatosComplementaria
+    from diot_models import (
+        DIOT,
+        DatosIdentificacion,
+        Periodo,
+        ProveedorTercero,
+        TipoTercero,
+        TipoOperacion,
+        Pais,
+        DatosComplementaria,
+    )
+
     DIOT_AVAILABLE = False
 
 # Configuración de la página
@@ -25,8 +46,9 @@ st.set_page_config(
     page_title="Procesador Avanzado de CFDIs",
     page_icon="🧾",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
+
 
 def process_xml_files_enhanced(uploaded_files, file_type):
     """
@@ -36,201 +58,222 @@ def process_xml_files_enhanced(uploaded_files, file_type):
     all_data = []
     all_pdfs = []
     unique_claves_prodserv = set()  # Para recopilar claves únicas
-    
+
     if not uploaded_files:
         return None, [], []
-    
+
     progress_bar = st.progress(0)
     status_text = st.empty()
-    
+
     for i, uploaded_file in enumerate(uploaded_files):
         try:
-            status_text.text(f"Procesando {i+1}/{len(uploaded_files)}: {uploaded_file.name}")
+            status_text.text(
+                f"Procesando {i + 1}/{len(uploaded_files)}: {uploaded_file.name}"
+            )
             progress_bar.progress((i + 1) / len(uploaded_files))
-            
+
             # Leer el archivo XML
             xml_content = uploaded_file.read()
-            
+
             # Procesar con satcfdi - ACCESO DIRECTO SIN JSON
             cfdi = CFDI.from_string(xml_content)
-            
+
             # Generar PDF del CFDI
             try:
                 pdf_bytes = render.pdf_bytes(cfdi)
-                all_pdfs.append({
-                    'filename': uploaded_file.name.replace('.xml', '.pdf'),
-                    'content': pdf_bytes
-                })
+                all_pdfs.append(
+                    {
+                        "filename": uploaded_file.name.replace(".xml", ".pdf"),
+                        "content": pdf_bytes,
+                    }
+                )
             except Exception as e:
                 st.warning(f"No se pudo generar PDF para {uploaded_file.name}: {e}")
-            
+
             # Extraer información DIRECTAMENTE del objeto CFDI
-            fecha = cfdi.get('Fecha', '')
+            fecha = cfdi.get("Fecha", "")
             if fecha:
                 # La fecha ya viene como datetime desde satcfdi 4.7.5
                 if isinstance(fecha, str):
-                    fecha_obj = datetime.strptime(fecha, '%Y-%m-%d %H:%M:%S')
+                    fecha_obj = datetime.strptime(fecha, "%Y-%m-%d %H:%M:%S")
                 else:
                     fecha_obj = fecha
-                mes = fecha_obj.strftime('%Y-%m')
-                fecha_formato = fecha_obj.strftime('%d/%m/%Y')
+                mes = fecha_obj.strftime("%Y-%m")
+                fecha_formato = fecha_obj.strftime("%d/%m/%Y")
             else:
-                mes = ''
-                fecha_formato = ''
-            
-            tipo_comprobante = str(cfdi.get('TipoDeComprobante', ''))
-            folio = str(cfdi.get('Folio', ''))
-            uuid = str(cfdi.get('Complemento', {}).get('TimbreFiscalDigital', {}).get('UUID', ''))
-            emisor_rfc = str(cfdi.get('Emisor', {}).get('Rfc', ''))
-            emisor_nombre = str(cfdi.get('Emisor', {}).get('Nombre', ''))
-            receptor_rfc = str(cfdi.get('Receptor', {}).get('Rfc', ''))
-            receptor_nombre = str(cfdi.get('Receptor', {}).get('Nombre', ''))
-            subtotal_cfdi = float(cfdi.get('SubTotal', 0))
-            total_cfdi = float(cfdi.get('Total', 0))
-            
+                mes = ""
+                fecha_formato = ""
+
+            tipo_comprobante = str(cfdi.get("TipoDeComprobante", ""))
+            folio = str(cfdi.get("Folio", ""))
+            uuid = str(
+                cfdi.get("Complemento", {})
+                .get("TimbreFiscalDigital", {})
+                .get("UUID", "")
+            )
+            emisor_rfc = str(cfdi.get("Emisor", {}).get("Rfc", ""))
+            emisor_nombre = str(cfdi.get("Emisor", {}).get("Nombre", ""))
+            receptor_rfc = str(cfdi.get("Receptor", {}).get("Rfc", ""))
+            receptor_nombre = str(cfdi.get("Receptor", {}).get("Nombre", ""))
+            subtotal_cfdi = float(cfdi.get("SubTotal", 0))
+            total_cfdi = float(cfdi.get("Total", 0))
+
             # Procesar conceptos DIRECTAMENTE
-            conceptos = cfdi.get('Conceptos', [])
-            
+            conceptos = cfdi.get("Conceptos", [])
+
             for concepto in conceptos:
                 # Recopilar clave única para el checklist - convertir a string
-                clave_prodserv = str(concepto.get('ClaveProdServ', ''))
+                clave_prodserv = str(concepto.get("ClaveProdServ", ""))
                 if clave_prodserv:
                     unique_claves_prodserv.add(clave_prodserv)
-                
+
                 row = {
-                    'Archivo_XML': uploaded_file.name,
-                    'UUID': uuid,
-                    'Folio': folio,
-                    'Fecha': fecha_formato,
-                    'Mes': mes,
-                    'Tipo_Comprobante': tipo_comprobante,
-                    'Emisor_RFC': emisor_rfc,
-                    'Emisor_Nombre': emisor_nombre,
-                    'Receptor_RFC': receptor_rfc,
-                    'Receptor_Nombre': receptor_nombre,
-                    'SubTotal_CFDI': subtotal_cfdi,
-                    'Total_CFDI': total_cfdi,
-                    'Monto_Concepto': float(concepto.get('Importe', 0)),
-                    'Concepto_Descripcion': str(concepto.get('Descripcion', '')),
-                    'Cantidad': float(concepto.get('Cantidad', 1)),
-                    'Unidad': str(concepto.get('Unidad', '')),
-                    'Valor_Unitario': float(concepto.get('ValorUnitario', 0)),
-                    'Clave_ProdServ': clave_prodserv,
-                    'Categoria': file_type,
-                    'Deducible': False  # Campo inicial para marcar deducibilidad
+                    "Archivo_XML": uploaded_file.name,
+                    "UUID": uuid,
+                    "Folio": folio,
+                    "Fecha": fecha_formato,
+                    "Mes": mes,
+                    "Tipo_Comprobante": tipo_comprobante,
+                    "Emisor_RFC": emisor_rfc,
+                    "Emisor_Nombre": emisor_nombre,
+                    "Receptor_RFC": receptor_rfc,
+                    "Receptor_Nombre": receptor_nombre,
+                    "SubTotal_CFDI": subtotal_cfdi,
+                    "Total_CFDI": total_cfdi,
+                    "Monto_Concepto": float(concepto.get("Importe", 0)),
+                    "Concepto_Descripcion": str(concepto.get("Descripcion", "")),
+                    "Cantidad": float(concepto.get("Cantidad", 1)),
+                    "Unidad": str(concepto.get("Unidad", "")),
+                    "Valor_Unitario": float(concepto.get("ValorUnitario", 0)),
+                    "Clave_ProdServ": clave_prodserv,
+                    "Categoria": file_type,
+                    "Deducible": False,  # Campo inicial para marcar deducibilidad
                 }
-                
+
                 # Inicializar campos de impuestos
-                row.update({
-                    'Ingresos_Subtotal': 0,
-                    'Ingresos_IVA': 0,
-                    'Ingresos_Retencion_IVA': 0,
-                    'Ingresos_Retencion_ISR': 0,
-                    'Egresos_Subtotal': 0,
-                    'Egresos_IVA': 0,
-                    'Egresos_Total': 0
-                })
-                
+                row.update(
+                    {
+                        "Ingresos_Subtotal": 0,
+                        "Ingresos_IVA": 0,
+                        "Ingresos_Retencion_IVA": 0,
+                        "Ingresos_Retencion_ISR": 0,
+                        "Egresos_Subtotal": 0,
+                        "Egresos_IVA": 0,
+                        "Egresos_Total": 0,
+                    }
+                )
+
                 # Procesar impuestos según tipo de comprobante
-                if tipo_comprobante.startswith('I'):  # Ingreso
-                    subtotal = float(concepto.get('Importe', 0))
-                    row['Ingresos_Subtotal'] = subtotal
-                    
-                    impuestos = concepto.get('Impuestos', {})
-                    
+                if tipo_comprobante.startswith("I"):  # Ingreso
+                    subtotal = float(concepto.get("Importe", 0))
+                    row["Ingresos_Subtotal"] = subtotal
+
+                    impuestos = concepto.get("Impuestos", {})
+
                     # IVA trasladado
-                    traslados = impuestos.get('Traslados', {})
+                    traslados = impuestos.get("Traslados", {})
                     iva_trasladado = 0
                     for key, traslado in traslados.items():
-                        if '002' in key:  # 002 es IVA
-                            iva_trasladado += float(traslado.get('Importe', 0))
-                    row['Ingresos_IVA'] = iva_trasladado
-                    
+                        if "002" in key:  # 002 es IVA
+                            iva_trasladado += float(traslado.get("Importe", 0))
+                    row["Ingresos_IVA"] = iva_trasladado
+
                     # Retenciones
-                    retenciones = impuestos.get('Retenciones', {})
+                    retenciones = impuestos.get("Retenciones", {})
                     retencion_iva = 0
                     retencion_isr = 0
-                    
+
                     for key, retencion in retenciones.items():
-                        if '002' in key:  # IVA
-                            retencion_iva += float(retencion.get('Importe', 0))
-                        elif '001' in key:  # ISR
-                            retencion_isr += float(retencion.get('Importe', 0))
-                    
-                    row['Ingresos_Retencion_IVA'] = retencion_iva
-                    row['Ingresos_Retencion_ISR'] = retencion_isr
-                
-                elif tipo_comprobante.startswith('E'):  # Egreso
-                    subtotal = float(concepto.get('Importe', 0))
-                    row['Egresos_Subtotal'] = subtotal
-                    
-                    impuestos = concepto.get('Impuestos', {})
-                    traslados = impuestos.get('Traslados', {})
+                        if "002" in key:  # IVA
+                            retencion_iva += float(retencion.get("Importe", 0))
+                        elif "001" in key:  # ISR
+                            retencion_isr += float(retencion.get("Importe", 0))
+
+                    row["Ingresos_Retencion_IVA"] = retencion_iva
+                    row["Ingresos_Retencion_ISR"] = retencion_isr
+
+                elif tipo_comprobante.startswith("E"):  # Egreso
+                    subtotal = float(concepto.get("Importe", 0))
+                    row["Egresos_Subtotal"] = subtotal
+
+                    impuestos = concepto.get("Impuestos", {})
+                    traslados = impuestos.get("Traslados", {})
                     iva_trasladado = 0
                     for key, traslado in traslados.items():
-                        if '002' in key:
-                            iva_trasladado += float(traslado.get('Importe', 0))
-                    row['Egresos_IVA'] = iva_trasladado
-                    row['Egresos_Total'] = subtotal + iva_trasladado
-                
+                        if "002" in key:
+                            iva_trasladado += float(traslado.get("Importe", 0))
+                    row["Egresos_IVA"] = iva_trasladado
+                    row["Egresos_Total"] = subtotal + iva_trasladado
+
                 all_data.append(row)
-                
+
         except Exception as e:
             st.error(f"Error procesando {uploaded_file.name}: {e}")
-    
+
     status_text.text("✅ Procesamiento completado")
     progress_bar.empty()
-    
-    return pd.DataFrame(all_data) if all_data else None, all_pdfs, sorted(list(unique_claves_prodserv))
+
+    return (
+        pd.DataFrame(all_data) if all_data else None,
+        all_pdfs,
+        sorted(list(unique_claves_prodserv)),
+    )
+
 
 def create_enhanced_excel(df, filename, sheet_name):
     """Crea un Excel con múltiples hojas y formato mejorado"""
     if df is None or df.empty:
         return None
-    
+
     buffer = io.BytesIO()
-    
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         # Hoja principal con todos los datos
-        df.to_excel(writer, sheet_name=f'Detalle_{sheet_name}', index=False)
-        
+        df.to_excel(writer, sheet_name=f"Detalle_{sheet_name}", index=False)
+
         # Hoja de resumen por mes
-        if 'Mes' in df.columns and not df['Mes'].isna().all():
-            resumen_mes = df.groupby(['Mes']).agg({
-                'Monto_Concepto': 'sum',
-                'Ingresos_Subtotal': 'sum',
-                'Ingresos_IVA': 'sum',
-                'Ingresos_Retencion_IVA': 'sum',
-                'Ingresos_Retencion_ISR': 'sum',
-                'Egresos_Subtotal': 'sum',
-                'Egresos_IVA': 'sum',
-                'Egresos_Total': 'sum',
-                'UUID': 'count'
-            }).reset_index()
-            resumen_mes.rename(columns={'UUID': 'Num_CFDIs'}, inplace=True)
-            resumen_mes.to_excel(writer, sheet_name='Resumen_Mensual', index=False)
-        
+        if "Mes" in df.columns and not df["Mes"].isna().all():
+            resumen_mes = (
+                df.groupby(["Mes"])
+                .agg(
+                    {
+                        "Monto_Concepto": "sum",
+                        "Ingresos_Subtotal": "sum",
+                        "Ingresos_IVA": "sum",
+                        "Ingresos_Retencion_IVA": "sum",
+                        "Ingresos_Retencion_ISR": "sum",
+                        "Egresos_Subtotal": "sum",
+                        "Egresos_IVA": "sum",
+                        "Egresos_Total": "sum",
+                        "UUID": "count",
+                    }
+                )
+                .reset_index()
+            )
+            resumen_mes.rename(columns={"UUID": "Num_CFDIs"}, inplace=True)
+            resumen_mes.to_excel(writer, sheet_name="Resumen_Mensual", index=False)
+
         # Hoja de totales generales
         totales_data = {
-            'Concepto': ['TOTAL GENERAL'],
-            'Num_CFDIs_Unicos': [len(df['UUID'].unique())],
-            'Total_Conceptos': [len(df)],
-            'Monto_Total': [df['Monto_Concepto'].sum()],
-            'Ingresos_Subtotal': [df['Ingresos_Subtotal'].sum()],
-            'Ingresos_IVA': [df['Ingresos_IVA'].sum()],
-            'Ingresos_Retencion_IVA': [df['Ingresos_Retencion_IVA'].sum()],
-            'Ingresos_Retencion_ISR': [df['Ingresos_Retencion_ISR'].sum()],
-            'Egresos_Subtotal': [df['Egresos_Subtotal'].sum()],
-            'Egresos_IVA': [df['Egresos_IVA'].sum()],
-            'Egresos_Total': [df['Egresos_Total'].sum()]
+            "Concepto": ["TOTAL GENERAL"],
+            "Num_CFDIs_Unicos": [len(df["UUID"].unique())],
+            "Total_Conceptos": [len(df)],
+            "Monto_Total": [df["Monto_Concepto"].sum()],
+            "Ingresos_Subtotal": [df["Ingresos_Subtotal"].sum()],
+            "Ingresos_IVA": [df["Ingresos_IVA"].sum()],
+            "Ingresos_Retencion_IVA": [df["Ingresos_Retencion_IVA"].sum()],
+            "Ingresos_Retencion_ISR": [df["Ingresos_Retencion_ISR"].sum()],
+            "Egresos_Subtotal": [df["Egresos_Subtotal"].sum()],
+            "Egresos_IVA": [df["Egresos_IVA"].sum()],
+            "Egresos_Total": [df["Egresos_Total"].sum()],
         }
         df_totales = pd.DataFrame(totales_data)
-        df_totales.to_excel(writer, sheet_name='Totales_Generales', index=False)
-        
+        df_totales.to_excel(writer, sheet_name="Totales_Generales", index=False)
+
         # Formatear todas las hojas
         for sheet_name_ws in writer.sheets:
             worksheet = writer.sheets[sheet_name_ws]
-            
+
             # Ajustar ancho de columnas
             for column in worksheet.columns:
                 max_length = 0
@@ -243,7 +286,7 @@ def create_enhanced_excel(df, filename, sheet_name):
                         pass
                 adjusted_width = min(max_length + 2, 50)
                 worksheet.column_dimensions[column_letter].width = adjusted_width
-    
+
     return buffer.getvalue()
 
 
@@ -253,8 +296,9 @@ def create_diot_interface():
     MEJORADO: Auto-llena datos desde CFDIs procesados
     """
     st.header("📋 DIOT - Declaración Informativa de Operaciones con Terceros")
-    
-    st.markdown("""
+
+    st.markdown(
+        """
     <div style="background-color: #fff3cd; padding: 15px; border-radius: 10px; border-left: 5px solid #ffc107; margin-bottom: 20px;">
         <h4 style="color: #856404; margin-top: 0;">ℹ️ ¿Qué es el DIOT?</h4>
         <p style="margin-bottom: 0;">
@@ -262,126 +306,157 @@ def create_diot_interface():
         Es obligatorio para personas que realicen actividades empresariales y estén obligadas al pago del IVA.
         </p>
     </div>
-    """, unsafe_allow_html=True)
-    
+    """,
+        unsafe_allow_html=True,
+    )
+
     # Función auxiliar para obtener periodo automáticamente
     def detectar_periodo_automatico():
         """Detecta el periodo desde los filtros de la aplicación"""
         # Obtener el RFC seleccionado desde los filtros globales si existe
-        rfc_filtro = getattr(st.session_state, 'selected_rfc', None)
-        periodo_filtro = getattr(st.session_state, 'selected_periodo', None)
-        
+        rfc_filtro = getattr(st.session_state, "selected_rfc", None)
+        periodo_filtro = getattr(st.session_state, "selected_periodo", None)
+
         return rfc_filtro, periodo_filtro
-    
+
     # Función para analizar CFDIs y generar proveedores automáticamente
-    def generar_proveedores_desde_cfdis(df_recibidos, rfc_contribuyente, periodo_seleccionado):
+    def generar_proveedores_desde_cfdis(
+        df_recibidos, rfc_contribuyente, periodo_seleccionado
+    ):
         """Analiza CFDIs recibidos y genera proveedores DIOT automáticamente"""
         if df_recibidos is None or df_recibidos.empty:
             return []
-            
+
         # Filtrar por el RFC del contribuyente (como receptor) y periodo si están disponibles
         df_filtrado = df_recibidos.copy()
-        
+
         if rfc_contribuyente:
-            df_filtrado = df_filtrado[df_filtrado['Receptor_RFC'] == rfc_contribuyente]
-        
+            df_filtrado = df_filtrado[df_filtrado["Receptor_RFC"] == rfc_contribuyente]
+
         if periodo_seleccionado:
             # Filtrar por mes/periodo
-            df_filtrado = df_filtrado[df_filtrado['Mes'].str.contains(periodo_seleccionado, na=False)]
-        
+            df_filtrado = df_filtrado[
+                df_filtrado["Mes"].str.contains(periodo_seleccionado, na=False)
+            ]
+
         if df_filtrado.empty:
             return []
-        
+
         # Agrupar por proveedor (Emisor) y sumar montos
         proveedores_auto = []
-        
+
         # Agrupar datos por RFC del emisor
-        grupos_emisor = df_filtrado.groupby(['Emisor_RFC', 'Emisor_Nombre']).agg({
-            'Egresos_Subtotal': 'sum',
-            'Egresos_IVA': 'sum',
-            'Egresos_Total': 'sum'
-        }).reset_index()
-        
+        grupos_emisor = (
+            df_filtrado.groupby(["Emisor_RFC", "Emisor_Nombre"])
+            .agg(
+                {
+                    "Egresos_Subtotal": "sum",
+                    "Egresos_IVA": "sum",
+                    "Egresos_Total": "sum",
+                }
+            )
+            .reset_index()
+        )
+
         for _, row in grupos_emisor.iterrows():
-            if row['Egresos_Subtotal'] > 0:  # Solo incluir si hay montos
+            if row["Egresos_Subtotal"] > 0:  # Solo incluir si hay montos
                 proveedor = {
-                    'tipo_tercero': 'Proveedor Nacional',
-                    'tipo_operacion': 'Otros', 
-                    'rfc': row['Emisor_RFC'],
-                    'nombre': row['Emisor_Nombre'],
-                    'iva16': row['Egresos_IVA'],  # IVA pagado
-                    'iva16_na': 0,
-                    'iva_rfn': 0,
-                    'iva_rfn_na': 0,
-                    'iva_import16': 0,
-                    'iva_import16_na': 0,
-                    'iva_import_exento': 0,
-                    'iva0': 0,
-                    'iva_exento': 0,
-                    'retenido': 0,
-                    'devoluciones': 0,
-                    'tipo_tercero_enum': TipoTercero.PROVEEDOR_NACIONAL,
-                    'tipo_operacion_enum': TipoOperacion.OTROS,
-                    'auto_generado': True  # Marca para identificar
+                    "tipo_tercero": "Proveedor Nacional",
+                    "tipo_operacion": "Otros",
+                    "rfc": row["Emisor_RFC"],
+                    "nombre": row["Emisor_Nombre"],
+                    "iva16": row["Egresos_IVA"],  # IVA pagado
+                    "iva16_na": 0,
+                    "iva_rfn": 0,
+                    "iva_rfn_na": 0,
+                    "iva_import16": 0,
+                    "iva_import16_na": 0,
+                    "iva_import_exento": 0,
+                    "iva0": 0,
+                    "iva_exento": 0,
+                    "retenido": 0,
+                    "devoluciones": 0,
+                    "tipo_tercero_enum": TipoTercero.PROVEEDOR_NACIONAL,
+                    "tipo_operacion_enum": TipoOperacion.OTROS,
+                    "auto_generado": True,  # Marca para identificar
                 }
                 proveedores_auto.append(proveedor)
-        
+
         return proveedores_auto
-    
+
     # Formulario para datos de identificación - MEJORADO
     st.subheader("📝 Datos de Identificación")
-    
+
     # Detectar datos automáticamente desde filtros
     rfc_filtro, periodo_filtro = detectar_periodo_automatico()
-    
+
     # Verificar si hay datos de CFDIs disponibles
-    datos_cfdi_disponibles = st.session_state.df_emitidos is not None or st.session_state.df_recibidos is not None
+    datos_cfdi_disponibles = (
+        st.session_state.df_emitidos is not None
+        or st.session_state.df_recibidos is not None
+    )
     df_combinado = None
-    
+
     if datos_cfdi_disponibles:
         st.success("🎯 Datos detectados automáticamente desde CFDIs procesados")
-        
+
         # Combinar datos de emitidos y recibidos
-        if st.session_state.df_emitidos is not None and st.session_state.df_recibidos is not None:
-            df_combinado = pd.concat([st.session_state.df_emitidos, st.session_state.df_recibidos], ignore_index=True)
+        if (
+            st.session_state.df_emitidos is not None
+            and st.session_state.df_recibidos is not None
+        ):
+            df_combinado = pd.concat(
+                [st.session_state.df_emitidos, st.session_state.df_recibidos],
+                ignore_index=True,
+            )
         elif st.session_state.df_emitidos is not None:
             df_combinado = st.session_state.df_emitidos
         elif st.session_state.df_recibidos is not None:
             df_combinado = st.session_state.df_recibidos
-        
+
         # RFC AUTOMÁTICO: Usar el seleccionado en filtros o permitir selección
         opciones_rfc = []
         rfc_predeterminado = rfc_filtro
-        
+
         try:
             if df_combinado is not None:
                 # Obtener RFCs únicos con nombres
-                rfc_emisores = df_combinado[['Emisor_RFC', 'Emisor_Nombre']].drop_duplicates()
-                rfc_receptores = df_combinado[['Receptor_RFC', 'Receptor_Nombre']].drop_duplicates()
-                
+                rfc_emisores = df_combinado[
+                    ["Emisor_RFC", "Emisor_Nombre"]
+                ].drop_duplicates()
+                rfc_receptores = df_combinado[
+                    ["Receptor_RFC", "Receptor_Nombre"]
+                ].drop_duplicates()
+
                 for _, row in rfc_emisores.iterrows():
-                    rfc_val = row['Emisor_RFC']
-                    nombre_val = row['Emisor_Nombre']
+                    rfc_val = row["Emisor_RFC"]
+                    nombre_val = row["Emisor_Nombre"]
                     if pd.notna(rfc_val):
-                        opciones_rfc.append((f"{rfc_val} - {nombre_val}", rfc_val, nombre_val))
-                
+                        opciones_rfc.append(
+                            (f"{rfc_val} - {nombre_val}", rfc_val, nombre_val)
+                        )
+
                 for _, row in rfc_receptores.iterrows():
-                    rfc_val = row['Receptor_RFC']
-                    nombre_val = row['Receptor_Nombre']
-                    if pd.notna(rfc_val) and (rfc_val, nombre_val) not in [(opt[1], opt[2]) for opt in opciones_rfc]:
-                        opciones_rfc.append((f"{rfc_val} - {nombre_val}", rfc_val, nombre_val))
+                    rfc_val = row["Receptor_RFC"]
+                    nombre_val = row["Receptor_Nombre"]
+                    if pd.notna(rfc_val) and (rfc_val, nombre_val) not in [
+                        (opt[1], opt[2]) for opt in opciones_rfc
+                    ]:
+                        opciones_rfc.append(
+                            (f"{rfc_val} - {nombre_val}", rfc_val, nombre_val)
+                        )
         except:
             pass
-        
+
         # Añadir opción manual al final
         opciones_rfc.append(("Manual", "Manual", ""))
     else:
         st.info("💡 Procesa primero algunos CFDIs para auto-llenar datos")
         opciones_rfc = [("Manual", "Manual", "")]
         rfc_predeterminado = None
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         # RFC INTELIGENTE: Preseleccionar si viene de filtros
         opcion_seleccionada = None
@@ -393,21 +468,21 @@ def create_diot_interface():
                     if rfc_val == rfc_predeterminado:
                         indice_predeterminado = i
                         break
-            
+
             opcion_seleccionada = st.selectbox(
                 "RFC del Contribuyente:",
                 options=opciones_rfc,
                 format_func=lambda x: x[0],
                 index=indice_predeterminado,
-                help="🎯 RFC auto-detectado de CFDIs procesados o selecciona manualmente"
+                help="🎯 RFC auto-detectado de CFDIs procesados o selecciona manualmente",
             )
-            
+
             if opcion_seleccionada and opcion_seleccionada[1] == "Manual":
                 rfc = st.text_input(
                     "RFC (Manual):",
                     placeholder="ABCD123456XYZ",
                     help="RFC del contribuyente",
-                    key="diot_rfc_manual"
+                    key="diot_rfc_manual",
                 )
             elif opcion_seleccionada:
                 rfc = opcion_seleccionada[1]
@@ -416,7 +491,7 @@ def create_diot_interface():
                     value=rfc,
                     disabled=True,
                     help="✅ RFC automáticamente detectado de CFDIs",
-                    key="diot_rfc_selected"
+                    key="diot_rfc_selected",
                 )
             else:
                 rfc = ""
@@ -425,39 +500,43 @@ def create_diot_interface():
                 "RFC",
                 placeholder="ABCD123456XYZ",
                 help="RFC del contribuyente",
-                key="diot_rfc_default"
+                key="diot_rfc_default",
             )
-        
+
         ejercicio = st.number_input(
             "Ejercicio Fiscal",
             min_value=2020,
             max_value=2030,
             value=datetime.now().year,
             help="Año del ejercicio fiscal",
-            key="diot_ejercicio"
+            key="diot_ejercicio",
         )
-        
+
     with col2:
         # RAZÓN SOCIAL AUTOMÁTICA
-        if datos_cfdi_disponibles and opcion_seleccionada is not None and opcion_seleccionada[1] != "Manual":
+        if (
+            datos_cfdi_disponibles
+            and opcion_seleccionada is not None
+            and opcion_seleccionada[1] != "Manual"
+        ):
             razon_social = st.text_input(
                 "Razón Social (Auto-detectada):",
                 value=opcion_seleccionada[2],
                 help="✅ Razón social automáticamente detectada de CFDIs",
-                key="diot_razon_social_detectada"
+                key="diot_razon_social_detectada",
             )
         else:
             razon_social = st.text_input(
                 "Razón Social",
                 placeholder="Mi Empresa S.A. de C.V.",
                 help="Razón social del contribuyente",
-                key="diot_razon_social_manual"
+                key="diot_razon_social_manual",
             )
-        
+
         # PERIODO INTELIGENTE con detección automática
         periodo_opciones = [
             ("ENERO", Periodo.ENERO, "2025-01"),
-            ("FEBRERO", Periodo.FEBRERO, "2025-02"), 
+            ("FEBRERO", Periodo.FEBRERO, "2025-02"),
             ("MARZO", Periodo.MARZO, "2025-03"),
             ("ABRIL", Periodo.ABRIL, "2025-04"),
             ("MAYO", Periodo.MAYO, "2025-05"),
@@ -473,13 +552,13 @@ def create_diot_interface():
             ("JUL-SEP", Periodo.JULIO_SEPTIEMBRE, "2025-Q3"),
             ("OCT-DIC", Periodo.OCTUBRE_DICIEMBRE, "2025-Q4"),
         ]
-        
+
         # Detectar periodo actual de los datos si hay CFDIs
         indice_periodo = 0
         if datos_cfdi_disponibles and df_combinado is not None:
             try:
                 # Obtener el mes más frecuente en los datos
-                meses_en_datos = df_combinado['Mes'].value_counts()
+                meses_en_datos = df_combinado["Mes"].value_counts()
                 if not meses_en_datos.empty:
                     mes_mas_frecuente = str(meses_en_datos.index[0])
                     # Buscar coincidencia en las opciones
@@ -489,102 +568,123 @@ def create_diot_interface():
                             break
             except:
                 pass
-        
+
         periodo = st.selectbox(
             "Período",
             options=periodo_opciones,
             format_func=lambda x: f"{x[0]} {'🎯' if datos_cfdi_disponibles else ''}",
             index=indice_periodo,
-            help="🎯 Periodo auto-detectado desde CFDIs procesados" if datos_cfdi_disponibles else "Período a reportar",
-            key="diot_periodo"
+            help="🎯 Periodo auto-detectado desde CFDIs procesados"
+            if datos_cfdi_disponibles
+            else "Período a reportar",
+            key="diot_periodo",
         )
-    
+
     # Opción para declaración complementaria
     st.subheader("🔄 Declaración Complementaria")
-    es_complementaria = st.checkbox("Es declaración complementaria", key="diot_complementaria")
-    
+    es_complementaria = st.checkbox(
+        "Es declaración complementaria", key="diot_complementaria"
+    )
+
     folio_anterior = ""
     fecha_anterior = None
-    
+
     if es_complementaria:
         col1, col2 = st.columns(2)
         with col1:
             folio_anterior = st.text_input(
                 "Folio de Declaración Anterior",
                 help="Folio de la declaración que se corrige",
-                key="diot_folio_anterior"
+                key="diot_folio_anterior",
             )
         with col2:
             fecha_anterior = st.date_input(
                 "Fecha de Presentación Anterior",
                 help="Fecha de la declaración anterior",
-                key="diot_fecha_anterior"
+                key="diot_fecha_anterior",
             )
-    
+
     # Proveedores - SECCIÓN MEJORADA CON AUTO-GENERACIÓN
     st.subheader("👥 Proveedores y Operaciones")
-    
+
     # Inicializar lista de proveedores en session_state
-    if 'proveedores_diot' not in st.session_state:
+    if "proveedores_diot" not in st.session_state:
         st.session_state.proveedores_diot = []
-    
+
     # NUEVA FUNCIONALIDAD: Auto-generar proveedores desde CFDIs
     if datos_cfdi_disponibles and st.session_state.df_recibidos is not None:
         col1, col2 = st.columns([2, 1])
         with col1:
-            st.info("🤖 **Auto-generación disponible**: Puedes generar proveedores automáticamente desde los CFDIs recibidos procesados")
+            st.info(
+                "🤖 **Auto-generación disponible**: Puedes generar proveedores automáticamente desde los CFDIs recibidos procesados"
+            )
         with col2:
             if st.button("🚀 Auto-generar Proveedores", type="secondary"):
                 with st.spinner("Analizando CFDIs y generando proveedores..."):
-                    periodo_seleccionado = periodo[2][:7] if periodo and len(periodo) > 2 else None  # Formato 2025-01
+                    periodo_seleccionado = (
+                        periodo[2][:7] if periodo and len(periodo) > 2 else None
+                    )  # Formato 2025-01
                     proveedores_auto = generar_proveedores_desde_cfdis(
-                        st.session_state.df_recibidos, 
-                        rfc, 
-                        periodo_seleccionado
+                        st.session_state.df_recibidos, rfc, periodo_seleccionado
                     )
-                    
+
                     if proveedores_auto:
                         # Limpiar proveedores auto-generados anteriores
                         st.session_state.proveedores_diot = [
-                            p for p in st.session_state.proveedores_diot 
-                            if not p.get('auto_generado', False)
+                            p
+                            for p in st.session_state.proveedores_diot
+                            if not p.get("auto_generado", False)
                         ]
                         # Añadir nuevos proveedores auto-generados
                         st.session_state.proveedores_diot.extend(proveedores_auto)
-                        st.success(f"✅ {len(proveedores_auto)} proveedores generados automáticamente")
+                        st.success(
+                            f"✅ {len(proveedores_auto)} proveedores generados automáticamente"
+                        )
                         st.rerun()
                     else:
-                        st.warning("⚠️ No se encontraron proveedores para el RFC y periodo seleccionados")
-        
+                        st.warning(
+                            "⚠️ No se encontraron proveedores para el RFC y periodo seleccionados"
+                        )
+
         # Mostrar estadísticas si hay datos
         if st.session_state.df_recibidos is not None and rfc:
             try:
                 df_recibidos_filtrado = st.session_state.df_recibidos[
-                    st.session_state.df_recibidos['Receptor_RFC'] == rfc
+                    st.session_state.df_recibidos["Receptor_RFC"] == rfc
                 ]
                 if not df_recibidos_filtrado.empty:
-                    total_proveedores = df_recibidos_filtrado['Emisor_RFC'].nunique()
-                    total_monto = df_recibidos_filtrado['Egresos_Total'].sum()
+                    total_proveedores = df_recibidos_filtrado["Emisor_RFC"].nunique()
+                    total_monto = df_recibidos_filtrado["Egresos_Total"].sum()
                     st.metric(
-                        "Proveedores detectados en CFDIs", 
+                        "Proveedores detectados en CFDIs",
                         f"{total_proveedores} proveedores",
-                        f"${total_monto:,.2f} total"
+                        f"${total_monto:,.2f} total",
                     )
             except:
                 pass
-    
+
     # Mostrar proveedores existentes - MEJORADO
     if st.session_state.proveedores_diot:
         st.write("**Proveedores agregados:**")
-        
+
         # Separar proveedores auto-generados vs manuales
-        proveedores_auto = [p for p in st.session_state.proveedores_diot if p.get('auto_generado', False)]
-        proveedores_manuales = [p for p in st.session_state.proveedores_diot if not p.get('auto_generado', False)]
-        
+        proveedores_auto = [
+            p
+            for p in st.session_state.proveedores_diot
+            if p.get("auto_generado", False)
+        ]
+        proveedores_manuales = [
+            p
+            for p in st.session_state.proveedores_diot
+            if not p.get("auto_generado", False)
+        ]
+
         if proveedores_auto:
             st.write(f"🤖 **Auto-generados ({len(proveedores_auto)}):**")
             for i, prov in enumerate(proveedores_auto):
-                with st.expander(f"🤖 Proveedor {i+1}: {prov.get('rfc', 'N/A')} - {prov.get('nombre', 'Sin nombre')}"):
+                with st.expander(
+                    f"🤖 Proveedor {i + 1}: {prov.get('rfc', 'N/A')} - {prov.get('nombre', 'Sin nombre')}"
+                ):
                     col1, col2 = st.columns([3, 1])
                     with col1:
                         st.write(f"**RFC:** {prov.get('rfc', 'N/A')}")
@@ -597,30 +697,36 @@ def create_diot_interface():
                         if st.button(f"🗑️ Eliminar", key=f"del_auto_prov_{i}"):
                             st.session_state.proveedores_diot.remove(prov)
                             st.rerun()
-        
+
         if proveedores_manuales:
             st.write(f"✏️ **Manuales ({len(proveedores_manuales)}):**")
             for i, prov in enumerate(proveedores_manuales):
                 prov_index = st.session_state.proveedores_diot.index(prov)
-                with st.expander(f"✏️ Proveedor {i+1}: {prov.get('nombre', prov.get('rfc', 'N/A'))}"):
+                with st.expander(
+                    f"✏️ Proveedor {i + 1}: {prov.get('nombre', prov.get('rfc', 'N/A'))}"
+                ):
                     col1, col2 = st.columns([3, 1])
                     with col1:
                         st.write(f"**Tipo:** {prov['tipo_tercero']}")
                         st.write(f"**Operación:** {prov['tipo_operacion']}")
-                        if 'rfc' in prov:
+                        if "rfc" in prov:
                             st.write(f"**RFC:** {prov['rfc']}")
-                        if 'nombre_extranjero' in prov:
+                        if "nombre_extranjero" in prov:
                             st.write(f"**Nombre:** {prov['nombre_extranjero']}")
                         st.write(f"**IVA 16%:** ${prov.get('iva16', 0):,.2f}")
                         st.caption("✏️ Ingresado manualmente")
                     with col2:
-                        if st.button(f"🗑️ Eliminar", key=f"del_manual_prov_{prov_index}"):
+                        if st.button(
+                            f"🗑️ Eliminar", key=f"del_manual_prov_{prov_index}"
+                        ):
                             st.session_state.proveedores_diot.pop(prov_index)
                             st.rerun()
-    
+
     # Formulario para agregar nuevo proveedor
-    with st.expander("➕ Agregar Nuevo Proveedor", expanded=len(st.session_state.proveedores_diot) == 0):
-        
+    with st.expander(
+        "➕ Agregar Nuevo Proveedor",
+        expanded=len(st.session_state.proveedores_diot) == 0,
+    ):
         tipo_tercero = st.selectbox(
             "Tipo de Tercero",
             options=[
@@ -629,134 +735,173 @@ def create_diot_interface():
                 ("Proveedor Global", TipoTercero.PROVEEDOR_GLOBAL),
             ],
             format_func=lambda x: x[0],
-            key="nuevo_tipo_tercero"
+            key="nuevo_tipo_tercero",
         )
-        
+
         tipo_operacion = st.selectbox(
-            "Tipo de Operación", 
+            "Tipo de Operación",
             options=[
                 ("Otros", TipoOperacion.OTROS),
-                ("Arrendamiento de Inmuebles", TipoOperacion.ARRENDAMIENTO_DE_INMUEBLES),
-                ("Prestación de Servicios Profesionales", TipoOperacion.PRESTACION_DE_SERVICIOS_PROFESIONALES),
+                (
+                    "Arrendamiento de Inmuebles",
+                    TipoOperacion.ARRENDAMIENTO_DE_INMUEBLES,
+                ),
+                (
+                    "Prestación de Servicios Profesionales",
+                    TipoOperacion.PRESTACION_DE_SERVICIOS_PROFESIONALES,
+                ),
             ],
             format_func=lambda x: x[0],
-            key="nuevo_tipo_operacion"
+            key="nuevo_tipo_operacion",
         )
-        
+
         # Campos dependiendo del tipo de tercero
         proveedor_rfc = ""
         id_fiscal = ""
         nombre_extranjero = ""
         pais = ("", None)
         nacionalidad = ""
-        
+
         if tipo_tercero and tipo_tercero[1] == TipoTercero.PROVEEDOR_NACIONAL:
             proveedor_rfc = st.text_input("RFC del Proveedor", key="nuevo_rfc")
         elif tipo_tercero and tipo_tercero[1] == TipoTercero.PROVEEDOR_EXTRANJERO:
             col1, col2 = st.columns(2)
             with col1:
                 id_fiscal = st.text_input("ID Fiscal", key="nuevo_id_fiscal")
-                nombre_extranjero = st.text_input("Nombre", key="nuevo_nombre_extranjero") 
+                nombre_extranjero = st.text_input(
+                    "Nombre", key="nuevo_nombre_extranjero"
+                )
             with col2:
                 pais = st.selectbox(
                     "País",
                     options=[(p.name, p) for p in Pais],
                     format_func=lambda x: x[0],
-                    key="nuevo_pais"
+                    key="nuevo_pais",
                 )
                 nacionalidad = st.text_input("Nacionalidad", key="nueva_nacionalidad")
-        
+
         # Montos de IVA
         st.write("**Montos de IVA:**")
         col1, col2, col3 = st.columns(3)
-        
+
         with col1:
-            iva16 = st.number_input("IVA 16%", min_value=0.0, value=0.0, key="nuevo_iva16")
-            iva16_na = st.number_input("IVA 16% No Acreditable", min_value=0.0, value=0.0, key="nuevo_iva16_na")
+            iva16 = st.number_input(
+                "IVA 16%", min_value=0.0, value=0.0, key="nuevo_iva16"
+            )
+            iva16_na = st.number_input(
+                "IVA 16% No Acreditable", min_value=0.0, value=0.0, key="nuevo_iva16_na"
+            )
             iva0 = st.number_input("IVA 0%", min_value=0.0, value=0.0, key="nuevo_iva0")
-            
+
         with col2:
-            iva_rfn = st.number_input("IVA RFN", min_value=0.0, value=0.0, key="nuevo_iva_rfn")
-            iva_rfn_na = st.number_input("IVA RFN No Acreditable", min_value=0.0, value=0.0, key="nuevo_iva_rfn_na")
-            iva_exento = st.number_input("IVA Exento", min_value=0.0, value=0.0, key="nuevo_iva_exento")
-            
+            iva_rfn = st.number_input(
+                "IVA RFN", min_value=0.0, value=0.0, key="nuevo_iva_rfn"
+            )
+            iva_rfn_na = st.number_input(
+                "IVA RFN No Acreditable",
+                min_value=0.0,
+                value=0.0,
+                key="nuevo_iva_rfn_na",
+            )
+            iva_exento = st.number_input(
+                "IVA Exento", min_value=0.0, value=0.0, key="nuevo_iva_exento"
+            )
+
         with col3:
-            iva_import16 = st.number_input("IVA Import. 16%", min_value=0.0, value=0.0, key="nuevo_iva_import16")
-            iva_import16_na = st.number_input("IVA Import. 16% NA", min_value=0.0, value=0.0, key="nuevo_iva_import16_na")
-            iva_import_exento = st.number_input("IVA Import. Exento", min_value=0.0, value=0.0, key="nuevo_iva_import_exento")
-        
+            iva_import16 = st.number_input(
+                "IVA Import. 16%", min_value=0.0, value=0.0, key="nuevo_iva_import16"
+            )
+            iva_import16_na = st.number_input(
+                "IVA Import. 16% NA",
+                min_value=0.0,
+                value=0.0,
+                key="nuevo_iva_import16_na",
+            )
+            iva_import_exento = st.number_input(
+                "IVA Import. Exento",
+                min_value=0.0,
+                value=0.0,
+                key="nuevo_iva_import_exento",
+            )
+
         col1, col2 = st.columns(2)
         with col1:
-            retenido = st.number_input("IVA Retenido", min_value=0.0, value=0.0, key="nuevo_retenido")
+            retenido = st.number_input(
+                "IVA Retenido", min_value=0.0, value=0.0, key="nuevo_retenido"
+            )
         with col2:
-            devoluciones = st.number_input("Devoluciones", min_value=0.0, value=0.0, key="nuevas_devoluciones")
-        
+            devoluciones = st.number_input(
+                "Devoluciones", min_value=0.0, value=0.0, key="nuevas_devoluciones"
+            )
+
         if st.button("➕ Agregar Proveedor"):
             if not tipo_tercero or not tipo_operacion:
                 st.error("Selecciona tipo de tercero y operación")
                 return
-                
+
             nuevo_proveedor = {
-                'tipo_tercero': tipo_tercero[0],
-                'tipo_operacion': tipo_operacion[0],
-                'iva16': iva16,
-                'iva16_na': iva16_na,
-                'iva_rfn': iva_rfn,
-                'iva_rfn_na': iva_rfn_na,
-                'iva_import16': iva_import16,
-                'iva_import16_na': iva_import16_na,
-                'iva_import_exento': iva_import_exento,
-                'iva0': iva0,
-                'iva_exento': iva_exento,
-                'retenido': retenido,
-                'devoluciones': devoluciones
+                "tipo_tercero": tipo_tercero[0],
+                "tipo_operacion": tipo_operacion[0],
+                "iva16": iva16,
+                "iva16_na": iva16_na,
+                "iva_rfn": iva_rfn,
+                "iva_rfn_na": iva_rfn_na,
+                "iva_import16": iva_import16,
+                "iva_import16_na": iva_import16_na,
+                "iva_import_exento": iva_import_exento,
+                "iva0": iva0,
+                "iva_exento": iva_exento,
+                "retenido": retenido,
+                "devoluciones": devoluciones,
             }
-            
+
             # Agregar campos específicos según el tipo
             if tipo_tercero[1] == TipoTercero.PROVEEDOR_NACIONAL:
-                nuevo_proveedor['rfc'] = proveedor_rfc
+                nuevo_proveedor["rfc"] = proveedor_rfc
             elif tipo_tercero[1] == TipoTercero.PROVEEDOR_EXTRANJERO:
-                nuevo_proveedor['id_fiscal'] = id_fiscal
-                nuevo_proveedor['nombre_extranjero'] = nombre_extranjero
+                nuevo_proveedor["id_fiscal"] = id_fiscal
+                nuevo_proveedor["nombre_extranjero"] = nombre_extranjero
                 if pais and len(pais) > 0:
-                    nuevo_proveedor['pais'] = pais[0]
-                nuevo_proveedor['nacionalidad'] = nacionalidad
-            
+                    nuevo_proveedor["pais"] = pais[0]
+                nuevo_proveedor["nacionalidad"] = nacionalidad
+
             # Guardar objetos enum para uso posterior
-            nuevo_proveedor['tipo_tercero_enum'] = tipo_tercero[1]
-            nuevo_proveedor['tipo_operacion_enum'] = tipo_operacion[1]
-            if tipo_tercero[1] == TipoTercero.PROVEEDOR_EXTRANJERO and pais and len(pais) > 1:
-                nuevo_proveedor['pais_enum'] = pais[1]
-            
+            nuevo_proveedor["tipo_tercero_enum"] = tipo_tercero[1]
+            nuevo_proveedor["tipo_operacion_enum"] = tipo_operacion[1]
+            if (
+                tipo_tercero[1] == TipoTercero.PROVEEDOR_EXTRANJERO
+                and pais
+                and len(pais) > 1
+            ):
+                nuevo_proveedor["pais_enum"] = pais[1]
+
             st.session_state.proveedores_diot.append(nuevo_proveedor)
             st.success("✅ Proveedor agregado correctamente")
             st.rerun()
-    
+
     # Generar DIOT
     st.subheader("📄 Generar DIOT")
-    
+
     if st.button("🚀 Generar DIOT", type="primary"):
         # Validaciones
         if not rfc or not razon_social:
             st.error("Por favor completa RFC y Razón Social")
             return
-            
+
         if not st.session_state.proveedores_diot:
             st.error("Agrega al menos un proveedor")
             return
-            
+
         if not periodo:
             st.error("Selecciona un período")
             return
-        
+
         try:
             # Crear datos de identificación (solo parámetros requeridos)
             datos_identificacion = DatosIdentificacion(
-                rfc=rfc,
-                ejercicio=int(ejercicio),
-                razon_social=razon_social
+                rfc=rfc, ejercicio=int(ejercicio), razon_social=razon_social
             )
-            
+
             # Crear datos complementarios si es necesario
             complementaria = None
             if es_complementaria and folio_anterior and fecha_anterior:
@@ -765,83 +910,89 @@ def create_diot_interface():
                     fecha_date = fecha_anterior[0] if fecha_anterior else date.today()
                 else:
                     fecha_date = fecha_anterior
-                    
+
                 complementaria = DatosComplementaria(
                     folio_anterior=folio_anterior,
-                    fecha_presentacion_anterior=fecha_date
+                    fecha_presentacion_anterior=fecha_date,
                 )
-            
+
             # Crear lista de proveedores
             proveedores_objetos = []
             for prov in st.session_state.proveedores_diot:
                 proveedor_kwargs = {
-                    'tipo_tercero': prov['tipo_tercero_enum'],
-                    'tipo_operacion': prov['tipo_operacion_enum'],
-                    'iva16': prov['iva16'],
-                    'iva16_na': prov['iva16_na'],
-                    'iva_rfn': prov['iva_rfn'],
-                    'iva_rfn_na': prov['iva_rfn_na'],
-                    'iva_import16': prov['iva_import16'],
-                    'iva_import16_na': prov['iva_import16_na'],
-                    'iva_import_exento': prov['iva_import_exento'],
-                    'iva0': prov['iva0'],
-                    'iva_exento': prov['iva_exento'],
-                    'retenido': prov['retenido'],
-                    'devoluciones': prov['devoluciones']
+                    "tipo_tercero": prov["tipo_tercero_enum"],
+                    "tipo_operacion": prov["tipo_operacion_enum"],
+                    "iva16": prov["iva16"],
+                    "iva16_na": prov["iva16_na"],
+                    "iva_rfn": prov["iva_rfn"],
+                    "iva_rfn_na": prov["iva_rfn_na"],
+                    "iva_import16": prov["iva_import16"],
+                    "iva_import16_na": prov["iva_import16_na"],
+                    "iva_import_exento": prov["iva_import_exento"],
+                    "iva0": prov["iva0"],
+                    "iva_exento": prov["iva_exento"],
+                    "retenido": prov["retenido"],
+                    "devoluciones": prov["devoluciones"],
                 }
-                
+
                 # Agregar campos específicos
-                if prov['tipo_tercero_enum'] == TipoTercero.PROVEEDOR_NACIONAL:
-                    proveedor_kwargs['rfc'] = prov['rfc']
-                elif prov['tipo_tercero_enum'] == TipoTercero.PROVEEDOR_EXTRANJERO:
-                    proveedor_kwargs['id_fiscal'] = prov['id_fiscal']
-                    proveedor_kwargs['nombre_extranjero'] = prov['nombre_extranjero']
-                    if 'pais_enum' in prov:
-                        proveedor_kwargs['pais'] = prov['pais_enum']
-                    proveedor_kwargs['nacionalidad'] = prov['nacionalidad']
-                
+                if prov["tipo_tercero_enum"] == TipoTercero.PROVEEDOR_NACIONAL:
+                    proveedor_kwargs["rfc"] = prov["rfc"]
+                elif prov["tipo_tercero_enum"] == TipoTercero.PROVEEDOR_EXTRANJERO:
+                    proveedor_kwargs["id_fiscal"] = prov["id_fiscal"]
+                    proveedor_kwargs["nombre_extranjero"] = prov["nombre_extranjero"]
+                    if "pais_enum" in prov:
+                        proveedor_kwargs["pais"] = prov["pais_enum"]
+                    proveedor_kwargs["nacionalidad"] = prov["nacionalidad"]
+
                 proveedores_objetos.append(ProveedorTercero(**proveedor_kwargs))
-            
+
             # Generar archivos DIOT - FUNCIONALIDAD SIMPLIFICADA
             with st.spinner("Generando DIOT..."):
                 txt_content = ""  # Inicializar variable
                 try:
                     # Generar contenido básico manualmente ya que tenemos todos los datos
-                    txt_content = f"DIOT|{rfc}|{razon_social}|{ejercicio}|{periodo[1].value}\n"
-                    txt_content += f"# Proveedores: {len(st.session_state.proveedores_diot)}\n"
-                    
+                    txt_content = (
+                        f"DIOT|{rfc}|{razon_social}|{ejercicio}|{periodo[1].value}\n"
+                    )
+                    txt_content += (
+                        f"# Proveedores: {len(st.session_state.proveedores_diot)}\n"
+                    )
+
                     for i, prov in enumerate(st.session_state.proveedores_diot):
                         linea = f"{prov['tipo_tercero_enum'].value}|{prov['tipo_operacion_enum'].value}|"
-                        
-                        if prov.get('rfc'):
+
+                        if prov.get("rfc"):
                             linea += f"{prov['rfc']}||||||"
                         else:
                             linea += f"|{prov.get('id_fiscal', '')}|{prov.get('nombre_extranjero', '')}|||"
-                        
-                        linea += f"{prov.get('iva16', 0):.2f}|{prov.get('iva16_na', 0):.2f}|"
+
+                        linea += (
+                            f"{prov.get('iva16', 0):.2f}|{prov.get('iva16_na', 0):.2f}|"
+                        )
                         linea += f"{prov.get('iva0', 0):.2f}|{prov.get('iva_exento', 0):.2f}|"
                         linea += f"{prov.get('iva_rfn', 0):.2f}|{prov.get('retenido', 0):.2f}|"
                         linea += f"{prov.get('devoluciones', 0):.2f}\n"
                         txt_content += linea
-                    
+
                     st.success("✅ DIOT generado exitosamente")
-                    
+
                 except Exception as gen_e:
                     st.error(f"Error generando archivo DIOT: {str(gen_e)}")
                     txt_content = f"Error generando DIOT: {str(gen_e)}"
-                
+
                 # Mostrar contenido generado siempre
                 st.subheader("📄 Contenido del archivo DIOT")
                 st.text_area("Contenido TXT:", txt_content, height=200)
-                
+
                 # Mostrar botón de descarga
                 st.download_button(
                     label="📄 Descargar DIOT (TXT)",
-                    data=txt_content.encode('utf-8'),
+                    data=txt_content.encode("utf-8"),
                     file_name=f"DIOT_{rfc}_{periodo[1].value}_{ejercicio}.txt",
-                    mime="text/plain"
+                    mime="text/plain",
                 )
-                
+
                 # Información adicional si hay proveedores
                 if st.session_state.proveedores_diot:
                     col1, col2, col3 = st.columns(3)
@@ -849,29 +1000,35 @@ def create_diot_interface():
                         total_proveedores = len(st.session_state.proveedores_diot)
                         st.metric("Proveedores", total_proveedores)
                     with col2:
-                        total_iva = sum(p.get('iva16', 0) for p in st.session_state.proveedores_diot)
+                        total_iva = sum(
+                            p.get("iva16", 0) for p in st.session_state.proveedores_diot
+                        )
                         st.metric("Total IVA 16%", f"${total_iva:,.2f}")
                     with col3:
                         st.metric("Ejercicio", ejercicio)
-                
-                st.info("💡 Archivo DIOT básico generado. Para funcionalidad completa, considera usar herramientas especializadas del SAT.")
+
+                st.info(
+                    "💡 Archivo DIOT básico generado. Para funcionalidad completa, considera usar herramientas especializadas del SAT."
+                )
                 st.success("✅ DIOT generado exitosamente")
-                
+
                 # Mostrar contenido generado
                 st.subheader("📄 Contenido del archivo DIOT")
                 st.text_area("Contenido TXT:", txt_content, height=200)
-                
+
                 # Mostrar botón de descarga
                 st.download_button(
                     label="� Descargar DIOT (TXT)",
                     data=txt_content,
                     file_name=f"DIOT_{rfc}_{periodo[1].value}_{ejercicio}.txt",
-                    mime="text/plain"
+                    mime="text/plain",
                 )
-                
+
                 st.success("🎉 DIOT generado exitosamente")
-                st.info("💡 El archivo .dec generado se puede cargar directamente en la aplicación del SAT")
-                
+                st.info(
+                    "💡 El archivo .dec generado se puede cargar directamente en la aplicación del SAT"
+                )
+
         except Exception as e:
             st.error(f"Error al generar DIOT: {str(e)}")
             st.error("Verifica que todos los campos estén completos y sean válidos")
@@ -881,21 +1038,22 @@ def merge_pdfs(pdf_list):
     """Fusiona múltiples PDFs en uno solo"""
     if not pdf_list:
         return None
-    
+
     merger = PdfMerger()
-    
+
     for pdf_info in pdf_list:
         try:
-            pdf_buffer = io.BytesIO(pdf_info['content'])
+            pdf_buffer = io.BytesIO(pdf_info["content"])
             merger.append(pdf_buffer)
         except Exception as e:
             st.warning(f"Error agregando PDF {pdf_info['filename']}: {e}")
-    
+
     output_buffer = io.BytesIO()
     merger.write(output_buffer)
     merger.close()
-    
+
     return output_buffer.getvalue()
+
 
 def apply_deducibility_filter(df, selected_claves):
     """
@@ -903,13 +1061,13 @@ def apply_deducibility_filter(df, selected_claves):
     """
     if df is None or df.empty:
         return df
-    
+
     # Crear una copia del DataFrame
     df_filtered = df.copy()
-    
+
     # Marcar como deducible los conceptos con claves seleccionadas
-    df_filtered['Deducible'] = df_filtered['Clave_ProdServ'].isin(selected_claves)
-    
+    df_filtered["Deducible"] = df_filtered["Clave_ProdServ"].isin(selected_claves)
+
     return df_filtered
 
 
@@ -920,136 +1078,163 @@ def create_data_calculator_ui(df, prefix=""):
     if df is None or df.empty:
         st.warning("No hay datos disponibles para calcular.")
         return df
-    
+
     st.subheader("🧮 Calculadora de CFDIs")
-    
+
     with st.expander("Realizar Cálculos", expanded=False):
         col1, col2 = st.columns(2)
-        
+
         with col1:
             st.write("**Filtros para el cálculo:**")
-            
+
             # Filtro por RFC Emisor (el más importante para DIOT)
-            emisores_unicos = ['Todos'] + sorted([
-                f"{row['Emisor_RFC']} - {row['Emisor_Nombre']}" 
-                for _, row in df[['Emisor_RFC', 'Emisor_Nombre']].drop_duplicates().iterrows()
-                if pd.notna(row['Emisor_RFC']) and pd.notna(row['Emisor_Nombre'])
-            ])
-            selected_emisor = st.selectbox(
-                "RFC Emisor:",
-                options=emisores_unicos,
-                key=f"calc_emisor_{prefix}"
+            emisores_unicos = ["Todos"] + sorted(
+                [
+                    f"{row['Emisor_RFC']} - {row['Emisor_Nombre']}"
+                    for _, row in df[["Emisor_RFC", "Emisor_Nombre"]]
+                    .drop_duplicates()
+                    .iterrows()
+                    if pd.notna(row["Emisor_RFC"]) and pd.notna(row["Emisor_Nombre"])
+                ]
             )
-            
+            selected_emisor = st.selectbox(
+                "RFC Emisor:", options=emisores_unicos, key=f"calc_emisor_{prefix}"
+            )
+
             # Filtro por RFC Receptor
-            receptores_unicos = ['Todos'] + sorted([
-                f"{row['Receptor_RFC']} - {row['Receptor_Nombre']}" 
-                for _, row in df[['Receptor_RFC', 'Receptor_Nombre']].drop_duplicates().iterrows()
-                if pd.notna(row['Receptor_RFC']) and pd.notna(row['Receptor_Nombre'])
-            ])
+            receptores_unicos = ["Todos"] + sorted(
+                [
+                    f"{row['Receptor_RFC']} - {row['Receptor_Nombre']}"
+                    for _, row in df[["Receptor_RFC", "Receptor_Nombre"]]
+                    .drop_duplicates()
+                    .iterrows()
+                    if pd.notna(row["Receptor_RFC"])
+                    and pd.notna(row["Receptor_Nombre"])
+                ]
+            )
             selected_receptor = st.selectbox(
                 "RFC Receptor:",
                 options=receptores_unicos,
-                key=f"calc_receptor_{prefix}"
+                key=f"calc_receptor_{prefix}",
             )
-            
+
             # Filtro de fechas - Deshabilitado temporalmente por problemas de tipos
             st.info("💡 Filtro de fechas disponible próximamente")
-        
+
         with col2:
             st.write("**Tipo de cálculo:**")
-            
+
             tipo_calculo = st.selectbox(
                 "¿Qué quieres calcular?",
                 options=[
                     "Ingresos Totales",
                     "IVA Total",
-                    "Subtotal sin IVA", 
+                    "Subtotal sin IVA",
                     "Número de Facturas",
                     "Promedio por Factura",
                     "Gastos Deducibles",
-                    "Resumen Completo"
+                    "Resumen Completo",
                 ],
-                key=f"calc_tipo_{prefix}"
+                key=f"calc_tipo_{prefix}",
             )
-            
+
             if st.button("🧮 Calcular", key=f"calc_btn_{prefix}"):
                 # Aplicar filtros
                 df_calc = df.copy()
-                
-                if selected_emisor != 'Todos':
+
+                if selected_emisor != "Todos":
                     # Extraer solo el RFC (antes del ' - ')
-                    rfc_emisor = selected_emisor.split(' - ')[0]
-                    df_calc = df_calc[df_calc['Emisor_RFC'] == rfc_emisor]
-                
-                if selected_receptor != 'Todos':
+                    rfc_emisor = selected_emisor.split(" - ")[0]
+                    df_calc = df_calc[df_calc["Emisor_RFC"] == rfc_emisor]
+
+                if selected_receptor != "Todos":
                     # Extraer solo el RFC (antes del ' - ')
-                    rfc_receptor = selected_receptor.split(' - ')[0]
-                    df_calc = df_calc[df_calc['Receptor_RFC'] == rfc_receptor]
-                
+                    rfc_receptor = selected_receptor.split(" - ")[0]
+                    df_calc = df_calc[df_calc["Receptor_RFC"] == rfc_receptor]
+
                 # Sin filtro de fechas por ahora
-                
+
                 # Realizar cálculos
                 if df_calc.empty:
-                    st.error("No hay datos que coincidan con los filtros seleccionados.")
+                    st.error(
+                        "No hay datos que coincidan con los filtros seleccionados."
+                    )
                 else:
                     st.success(f"📊 Datos encontrados: {len(df_calc)} registros")
-                    
+
                     if tipo_calculo == "Ingresos Totales":
-                        total = df_calc['Total_CFDI'].sum()
+                        total = df_calc["Total_CFDI"].sum()
                         st.metric("💰 Ingresos Totales", f"${total:,.2f}")
-                        
+
                     elif tipo_calculo == "IVA Total":
-                        iva_total = df_calc['Ingresos_IVA'].sum() + df_calc['Egresos_IVA'].sum()
+                        iva_total = (
+                            df_calc["Ingresos_IVA"].sum() + df_calc["Egresos_IVA"].sum()
+                        )
                         st.metric("📋 IVA Total", f"${iva_total:,.2f}")
-                        
+
                     elif tipo_calculo == "Subtotal sin IVA":
-                        subtotal = df_calc['SubTotal_CFDI'].sum()
+                        subtotal = df_calc["SubTotal_CFDI"].sum()
                         st.metric("📊 Subtotal (sin IVA)", f"${subtotal:,.2f}")
-                        
+
                     elif tipo_calculo == "Número de Facturas":
-                        num_facturas = df_calc['UUID'].nunique()
+                        num_facturas = df_calc["UUID"].nunique()
                         st.metric("📄 Número de Facturas", num_facturas)
-                        
+
                     elif tipo_calculo == "Promedio por Factura":
                         if len(df_calc) > 0:
-                            promedio = df_calc['Total_CFDI'].mean()
+                            promedio = df_calc["Total_CFDI"].mean()
                             st.metric("📈 Promedio por Factura", f"${promedio:,.2f}")
-                        
+
                     elif tipo_calculo == "Gastos Deducibles":
-                        if 'Deducible' in df_calc.columns:
-                            deducibles = df_calc[df_calc['Deducible'] == True]
-                            total_deducible = deducibles['Monto_Concepto'].sum()
-                            st.metric("💸 Gastos Deducibles", f"${total_deducible:,.2f}")
+                        if "Deducible" in df_calc.columns:
+                            deducibles = df_calc[df_calc["Deducible"] == True]
+                            total_deducible = deducibles["Monto_Concepto"].sum()
+                            st.metric(
+                                "💸 Gastos Deducibles", f"${total_deducible:,.2f}"
+                            )
                         else:
-                            st.info("Primero marca los servicios deducibles en el checklist")
-                            
+                            st.info(
+                                "Primero marca los servicios deducibles en el checklist"
+                            )
+
                     elif tipo_calculo == "Resumen Completo":
                         col_res1, col_res2, col_res3 = st.columns(3)
-                        
+
                         with col_res1:
-                            st.metric("💰 Total", f"${df_calc['Total_CFDI'].sum():,.2f}")
-                            st.metric("📊 Subtotal", f"${df_calc['SubTotal_CFDI'].sum():,.2f}")
-                            
+                            st.metric(
+                                "💰 Total", f"${df_calc['Total_CFDI'].sum():,.2f}"
+                            )
+                            st.metric(
+                                "📊 Subtotal", f"${df_calc['SubTotal_CFDI'].sum():,.2f}"
+                            )
+
                         with col_res2:
-                            iva_total = df_calc['Ingresos_IVA'].sum() + df_calc['Egresos_IVA'].sum()
+                            iva_total = (
+                                df_calc["Ingresos_IVA"].sum()
+                                + df_calc["Egresos_IVA"].sum()
+                            )
                             st.metric("📋 IVA Total", f"${iva_total:,.2f}")
-                            st.metric("📄 Facturas", df_calc['UUID'].nunique())
-                            
+                            st.metric("📄 Facturas", df_calc["UUID"].nunique())
+
                         with col_res3:
-                            if 'Deducible' in df_calc.columns:
-                                deducibles = df_calc[df_calc['Deducible'] == True]
-                                st.metric("💸 Deducibles", f"${deducibles['Monto_Concepto'].sum():,.2f}")
+                            if "Deducible" in df_calc.columns:
+                                deducibles = df_calc[df_calc["Deducible"] == True]
+                                st.metric(
+                                    "💸 Deducibles",
+                                    f"${deducibles['Monto_Concepto'].sum():,.2f}",
+                                )
                             else:
                                 st.metric("💸 Deducibles", "N/A")
-                            st.metric("📈 Promedio", f"${df_calc['Total_CFDI'].mean():,.2f}")
-                    
+                            st.metric(
+                                "📈 Promedio", f"${df_calc['Total_CFDI'].mean():,.2f}"
+                            )
+
                     # Mostrar información adicional
-                    if selected_emisor != 'Todos':
+                    if selected_emisor != "Todos":
                         st.info(f"🏢 RFC Emisor: {selected_emisor}")
-                    if selected_receptor != 'Todos':
+                    if selected_receptor != "Todos":
                         st.info(f"🏢 RFC Receptor: {selected_receptor}")
-    
+
     return df
 
 
@@ -1060,94 +1245,95 @@ def create_data_filter_ui(df, prefix=""):
     if df is None or df.empty:
         st.warning("No hay datos disponibles para filtrar.")
         return df
-    
+
     st.subheader("🔍 Filtros de Datos")
-    
+
     with st.expander("Configurar Filtros", expanded=False):
         col1, col2 = st.columns(2)
-        
+
         with col1:
             # Filtro por RFC Receptor
-            receptores_unicos = sorted(df['Receptor_RFC'].dropna().unique())
+            receptores_unicos = sorted(df["Receptor_RFC"].dropna().unique())
             selected_receptores = st.multiselect(
                 "RFC Receptor:",
                 options=receptores_unicos,
                 default=[],
-                key=f"receptores_{prefix}"
+                key=f"receptores_{prefix}",
             )
-            
+
             # Filtro por RFC Emisor
-            emisores_unicos = sorted(df['Emisor_RFC'].dropna().unique())
+            emisores_unicos = sorted(df["Emisor_RFC"].dropna().unique())
             selected_emisores = st.multiselect(
                 "RFC Emisor:",
                 options=emisores_unicos,
                 default=[],
-                key=f"emisores_{prefix}"
+                key=f"emisores_{prefix}",
             )
-            
+
             # Filtro por Tipo de Comprobante
-            tipos_comprobante = sorted(df['Tipo_Comprobante'].dropna().unique())
+            tipos_comprobante = sorted(df["Tipo_Comprobante"].dropna().unique())
             selected_tipos = st.multiselect(
                 "Tipo de Comprobante:",
                 options=tipos_comprobante,
                 default=[],
-                key=f"tipos_{prefix}"
+                key=f"tipos_{prefix}",
             )
-        
+
         with col2:
             # Filtro por rango de fechas
             fecha_inicio = None
             fecha_fin = None
-            
-            if 'Fecha' in df.columns and not df['Fecha'].isna().all():
-                fechas_validas = pd.to_datetime(df['Fecha'], format='%d/%m/%Y', errors='coerce').dropna()
+
+            if "Fecha" in df.columns and not df["Fecha"].isna().all():
+                fechas_validas = pd.to_datetime(
+                    df["Fecha"], format="%d/%m/%Y", errors="coerce"
+                ).dropna()
                 if not fechas_validas.empty:
                     fecha_min = fechas_validas.min().date()
                     fecha_max = fechas_validas.max().date()
-                    
+
                     fecha_inicio = st.date_input(
                         "Fecha Inicio:",
                         value=fecha_min,
                         min_value=fecha_min,
-                        max_value=fecha_max
+                        max_value=fecha_max,
                     )
-                    
+
                     fecha_fin = st.date_input(
                         "Fecha Fin:",
                         value=fecha_max,
                         min_value=fecha_min,
-                        max_value=fecha_max
+                        max_value=fecha_max,
                     )
-            
+
             # Filtro por monto mínimo
             monto_min = st.number_input(
-                "Monto Mínimo:",
-                min_value=0.0,
-                value=0.0,
-                step=100.0
+                "Monto Mínimo:", min_value=0.0, value=0.0, step=100.0
             )
-            
+
             # Filtro por deducibilidad
             filtro_deducible = st.selectbox(
                 "Mostrar solo:",
-                options=["Todos", "Solo Deducibles", "Solo No Deducibles"]
+                options=["Todos", "Solo Deducibles", "Solo No Deducibles"],
             )
-    
+
     # Aplicar filtros
     df_filtered = df.copy()
-    
+
     if selected_receptores:
-        df_filtered = df_filtered[df_filtered['Receptor_RFC'].isin(selected_receptores)]
-    
+        df_filtered = df_filtered[df_filtered["Receptor_RFC"].isin(selected_receptores)]
+
     if selected_emisores:
-        df_filtered = df_filtered[df_filtered['Emisor_RFC'].isin(selected_emisores)]
-    
+        df_filtered = df_filtered[df_filtered["Emisor_RFC"].isin(selected_emisores)]
+
     if selected_tipos:
-        df_filtered = df_filtered[df_filtered['Tipo_Comprobante'].isin(selected_tipos)]
-    
+        df_filtered = df_filtered[df_filtered["Tipo_Comprobante"].isin(selected_tipos)]
+
     if fecha_inicio is not None and fecha_fin is not None:
         # Convertir fechas del DataFrame para comparación
-        df_fechas = pd.to_datetime(df_filtered['Fecha'], format='%d/%m/%Y', errors='coerce')
+        df_fechas = pd.to_datetime(
+            df_filtered["Fecha"], format="%d/%m/%Y", errors="coerce"
+        )
         # Manejo seguro de tipos de fecha de Streamlit
         try:
             # Convertir a string y luego a timestamp para manejar todos los tipos
@@ -1160,20 +1346,23 @@ def create_data_filter_ui(df, prefix=""):
         except (TypeError, ValueError):
             # Si hay problemas con las fechas, simplemente no aplicar el filtro
             pass
-    
+
     if monto_min > 0:
-        df_filtered = df_filtered[df_filtered['Monto_Concepto'] >= monto_min]
-    
+        df_filtered = df_filtered[df_filtered["Monto_Concepto"] >= monto_min]
+
     if filtro_deducible == "Solo Deducibles":
-        df_filtered = df_filtered[df_filtered['Deducible'] == True]
+        df_filtered = df_filtered[df_filtered["Deducible"] == True]
     elif filtro_deducible == "Solo No Deducibles":
-        df_filtered = df_filtered[df_filtered['Deducible'] == False]
-    
+        df_filtered = df_filtered[df_filtered["Deducible"] == False]
+
     # Mostrar resumen del filtrado
     if len(df_filtered) != len(df):
-        st.info(f"📊 Mostrando {len(df_filtered)} de {len(df)} registros ({len(df_filtered)/len(df)*100:.1f}%)")
-    
+        st.info(
+            f"📊 Mostrando {len(df_filtered)} de {len(df)} registros ({len(df_filtered) / len(df) * 100:.1f}%)"
+        )
+
     return df_filtered
+
 
 def create_custom_export_ui(df, prefix=""):
     """
@@ -1181,76 +1370,88 @@ def create_custom_export_ui(df, prefix=""):
     """
     if df is None or df.empty:
         return
-    
+
     st.subheader("📤 Exportación Personalizada")
-    
+
     with st.expander("Configurar Exportación", expanded=False):
         # Seleccionar columnas
         todas_columnas = df.columns.tolist()
         columnas_seleccionadas = st.multiselect(
             "Seleccionar Columnas:",
             options=todas_columnas,
-            default=['UUID', 'Fecha', 'Emisor_RFC', 'Receptor_RFC', 'Monto_Concepto', 'Clave_ProdServ', 'Deducible'],
-            key=f"columnas_{prefix}"
+            default=[
+                "UUID",
+                "Fecha",
+                "Emisor_RFC",
+                "Receptor_RFC",
+                "Monto_Concepto",
+                "Clave_ProdServ",
+                "Deducible",
+            ],
+            key=f"columnas_{prefix}",
         )
-        
+
         # Nombre del archivo
         nombre_archivo = st.text_input(
-            "Nombre del archivo:",
-            value="datos_cfdi_personalizado"
+            "Nombre del archivo:", value="datos_cfdi_personalizado"
         )
-        
+
         # Formato de exportación
         formato_export = st.selectbox(
-            "Formato:",
-            options=["Excel (.xlsx)", "CSV (.csv)"]
+            "Formato:", options=["Excel (.xlsx)", "CSV (.csv)"]
         )
-        
+
         if st.button("🚀 Generar Exportación Personalizada"):
             if not columnas_seleccionadas:
                 st.error("Debes seleccionar al menos una columna.")
                 return
-            
+
             # Crear DataFrame con las columnas seleccionadas
             df_export = df[columnas_seleccionadas].copy()
-            
+
             if formato_export == "Excel (.xlsx)":
                 # Crear Excel
                 buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                    df_export.to_excel(writer, sheet_name='Datos_Personalizados', index=False)
-                
+                with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                    df_export.to_excel(
+                        writer, sheet_name="Datos_Personalizados", index=False
+                    )
+
                 st.download_button(
                     label="📥 Descargar Excel Personalizado",
                     data=buffer.getvalue(),
                     file_name=f"{nombre_archivo}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
-            
+
             elif formato_export == "CSV (.csv)":
                 # Crear CSV
-                csv_data = df_export.to_csv(index=False, encoding='utf-8-sig')
-                
+                csv_data = df_export.to_csv(index=False, encoding="utf-8-sig")
+
                 st.download_button(
                     label="📥 Descargar CSV Personalizado",
                     data=csv_data,
                     file_name=f"{nombre_archivo}.csv",
-                    mime="text/csv"
+                    mime="text/csv",
                 )
-            
+
             st.success(f"✅ Archivo {formato_export} preparado para descarga!")
-            st.info(f"📊 Exportando {len(df_export)} filas y {len(df_export.columns)} columnas")
+            st.info(
+                f"📊 Exportando {len(df_export)} filas y {len(df_export.columns)} columnas"
+            )
+
 
 def main():
     st.title("🧾 Procesador Avanzado de CFDIs")
     st.markdown("### Convierte XMLs a Excel y genera PDFs consolidados")
-    
+
     # Link visible para descarga de XMLs del SAT
-    st.markdown("""
+    st.markdown(
+        """
     <div style="background-color: #e8f4fd; padding: 15px; border-radius: 10px; border-left: 5px solid #1f77b4; margin-bottom: 20px;">
         <h4 style="color: #1f77b4; margin-top: 0;">📥 Descarga tus XMLs del SAT</h4>
         <p style="margin-bottom: 10px;">Para obtener tus archivos XML necesarios para este procesador:</p>
-        <a href="https://cfdiau.sat.gob.mx/nidp/wsfed/ep?id=SATUPCFDiCon&sid=0&option=credential&sid=0" 
+        <a href="https://portalcfdi.facturaelectronica.sat.gob.mx/" 
            target="_blank" 
            style="background-color: #1f77b4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
            🔗 Portal de CFDIs del SAT
@@ -1259,8 +1460,10 @@ def main():
         Una vez descargados los XMLs del portal del SAT, súbelos aquí para procesarlos.
         </p>
     </div>
-    """, unsafe_allow_html=True)
-    
+    """,
+        unsafe_allow_html=True,
+    )
+
     # Sidebar con información
     st.sidebar.header("📋 Características")
     st.sidebar.markdown("""
@@ -1278,116 +1481,148 @@ def main():
     - Desglose de impuestos
     - Datos de emisor/receptor
     """)
-    
+
     # Tabs principales - agregamos DIOT
-    tab1, tab2, tab3, tab4 = st.tabs(["📤 CFDIs Emitidos", "📥 CFDIs Recibidos", "📊 Consolidado", "📋 DIOT"])
-    
+    tab1, tab2, tab3, tab4 = st.tabs(
+        ["📤 CFDIs Emitidos", "📥 CFDIs Recibidos", "📊 Consolidado", "📋 DIOT"]
+    )
+
     # Variables de sesión
-    if 'df_emitidos' not in st.session_state:
+    if "df_emitidos" not in st.session_state:
         st.session_state.df_emitidos = None
-    if 'df_recibidos' not in st.session_state:
+    if "df_recibidos" not in st.session_state:
         st.session_state.df_recibidos = None
-    if 'pdfs_emitidos' not in st.session_state:
+    if "pdfs_emitidos" not in st.session_state:
         st.session_state.pdfs_emitidos = []
-    if 'pdfs_recibidos' not in st.session_state:
+    if "pdfs_recibidos" not in st.session_state:
         st.session_state.pdfs_recibidos = []
-    if 'claves_emitidos' not in st.session_state:
+    if "claves_emitidos" not in st.session_state:
         st.session_state.claves_emitidos = []
-    if 'claves_recibidos' not in st.session_state:
+    if "claves_recibidos" not in st.session_state:
         st.session_state.claves_recibidos = []
-    
+
     with tab1:
         st.header("📤 CFDIs Emitidos")
-        
+
         uploaded_emitidos = st.file_uploader(
             "📁 Selecciona archivos XML de CFDIs emitidos",
-            type=['xml'],
+            type=["xml"],
             accept_multiple_files=True,
-            key="emitidos"
+            key="emitidos",
         )
-        
+
         if uploaded_emitidos:
             if st.button("🚀 Procesar CFDIs Emitidos", key="btn_emitidos"):
                 with st.spinner("Procesando CFDIs emitidos..."):
                     result = process_xml_files_enhanced(uploaded_emitidos, "Emitidos")
                     # La función ahora retorna 3 valores: df, pdfs, claves_unicas
-                    st.session_state.df_emitidos, st.session_state.pdfs_emitidos, st.session_state.claves_emitidos = result
-                
+                    (
+                        st.session_state.df_emitidos,
+                        st.session_state.pdfs_emitidos,
+                        st.session_state.claves_emitidos,
+                    ) = result
+
                 if st.session_state.df_emitidos is not None:
-                    st.success(f"✅ {len(st.session_state.df_emitidos)} conceptos procesados")
-                    st.success(f"📄 {len(st.session_state.pdfs_emitidos)} PDFs generados")
-                    st.success(f"🔑 {len(st.session_state.claves_emitidos)} claves de productos/servicios encontradas")
-        
+                    st.success(
+                        f"✅ {len(st.session_state.df_emitidos)} conceptos procesados"
+                    )
+                    st.success(
+                        f"📄 {len(st.session_state.pdfs_emitidos)} PDFs generados"
+                    )
+                    st.success(
+                        f"🔑 {len(st.session_state.claves_emitidos)} claves de productos/servicios encontradas"
+                    )
+
         if st.session_state.df_emitidos is not None:
             # Checklist de deducibilidad
-            if 'claves_emitidos' in st.session_state and st.session_state.claves_emitidos:
+            if (
+                "claves_emitidos" in st.session_state
+                and st.session_state.claves_emitidos
+            ):
                 st.subheader("✅ Seleccionar Servicios Deducibles")
-                
+
                 with st.expander("Configurar Deducibilidad", expanded=True):
-                    st.info("💡 Selecciona las claves de productos/servicios que son deducibles de impuestos:")
-                    
+                    st.info(
+                        "💡 Selecciona las claves de productos/servicios que son deducibles de impuestos:"
+                    )
+
                     # Crear columnas para mostrar las claves organizadamente
                     n_claves = len(st.session_state.claves_emitidos)
                     n_cols = min(3, n_claves)  # Máximo 3 columnas
                     cols = st.columns(n_cols)
-                    
+
                     selected_claves = []
                     for i, clave in enumerate(st.session_state.claves_emitidos):
                         col_idx = i % n_cols
                         with cols[col_idx]:
                             if st.checkbox(f"� {clave}", key=f"clave_emit_{clave}"):
                                 selected_claves.append(clave)
-                    
-                    if st.button("💾 Aplicar Configuración de Deducibilidad", key="apply_deduct_emit"):
+
+                    if st.button(
+                        "💾 Aplicar Configuración de Deducibilidad",
+                        key="apply_deduct_emit",
+                    ):
                         with st.spinner("Aplicando configuración..."):
                             # Aplicar el filtro de deducibilidad
                             st.session_state.df_emitidos = apply_deducibility_filter(
                                 st.session_state.df_emitidos, selected_claves
                             )
-                            st.success(f"✅ Configuración aplicada: {len(selected_claves)} claves marcadas como deducibles")
+                            st.success(
+                                f"✅ Configuración aplicada: {len(selected_claves)} claves marcadas como deducibles"
+                            )
                             # Usar tiempo corto para evitar bucles infinitos
                             import time
+
                             time.sleep(0.5)
                         st.rerun()
-            
+
             # Filtros de datos
             df_filtered = st.session_state.df_emitidos
-            
+
             # Calculadora de CFDIs
             create_data_calculator_ui(df_filtered, "emitidos")
-            
+
             # Mostrar métricas
             st.subheader("📊 Resumen Emitidos")
             col1, col2, col3, col4 = st.columns(4)
-            
+
             with col1:
-                st.metric("CFDIs Únicos", len(df_filtered['UUID'].unique()))
+                st.metric("CFDIs Únicos", len(df_filtered["UUID"].unique()))
             with col2:
                 st.metric("Total Conceptos", len(df_filtered))
             with col3:
-                st.metric("Ingresos Subtotal", f"${df_filtered['Ingresos_Subtotal'].sum():,.2f}")
+                st.metric(
+                    "Ingresos Subtotal",
+                    f"${df_filtered['Ingresos_Subtotal'].sum():,.2f}",
+                )
             with col4:
                 st.metric("IVA Ingresos", f"${df_filtered['Ingresos_IVA'].sum():,.2f}")
-            
+
             # Mostrar métricas adicionales de deducibilidad
-            if 'Deducible' in df_filtered.columns:
+            if "Deducible" in df_filtered.columns:
                 col5, col6 = st.columns(2)
                 with col5:
-                    deducibles = df_filtered[df_filtered['Deducible'] == True]
-                    st.metric("💰 Gastos Deducibles", f"${deducibles['Monto_Concepto'].sum():,.2f}")
+                    deducibles = df_filtered[df_filtered["Deducible"] == True]
+                    st.metric(
+                        "💰 Gastos Deducibles",
+                        f"${deducibles['Monto_Concepto'].sum():,.2f}",
+                    )
                 with col6:
-                    st.metric("📊 % Deducible", f"{len(deducibles)/len(df_filtered)*100:.1f}%")
-            
+                    st.metric(
+                        "📊 % Deducible",
+                        f"{len(deducibles) / len(df_filtered) * 100:.1f}%",
+                    )
+
             # Mostrar datos filtrados
             st.subheader("📋 Datos Detallados")
             st.dataframe(df_filtered, use_container_width=True, height=300)
-            
+
             # Exportación personalizada - Simplificada en botones tradicionales
-            
+
             # Botones de descarga tradicionales
             st.subheader("📥 Descargas Tradicionales")
             col1, col2 = st.columns(2)
-            
+
             with col1:
                 excel_data = create_enhanced_excel(df_filtered, "Emitidos", "Emitidos")
                 if excel_data:
@@ -1395,9 +1630,9 @@ def main():
                         label="📊 Descargar Excel Completo",
                         data=excel_data,
                         file_name="CFDIs_Emitidos_Completo.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
-            
+
             with col2:
                 if st.session_state.pdfs_emitidos:
                     merged_pdf = merge_pdfs(st.session_state.pdfs_emitidos)
@@ -1406,115 +1641,147 @@ def main():
                             label="📄 Descargar PDF Consolidado",
                             data=merged_pdf,
                             file_name="CFDIs_Emitidos_Consolidado.pdf",
-                            mime="application/pdf"
+                            mime="application/pdf",
                         )
-    
+
     with tab2:
         st.header("📥 CFDIs Recibidos")
-        
+
         uploaded_recibidos = st.file_uploader(
             "📁 Selecciona archivos XML de CFDIs recibidos",
-            type=['xml'],
+            type=["xml"],
             accept_multiple_files=True,
-            key="recibidos"
+            key="recibidos",
         )
-        
+
         if uploaded_recibidos:
             if st.button("🚀 Procesar CFDIs Recibidos", key="btn_recibidos"):
                 with st.spinner("Procesando CFDIs recibidos..."):
                     result = process_xml_files_enhanced(uploaded_recibidos, "Recibidos")
                     # La función ahora retorna 3 valores: df, pdfs, claves_unicas
-                    st.session_state.df_recibidos, st.session_state.pdfs_recibidos, st.session_state.claves_recibidos = result
-                
+                    (
+                        st.session_state.df_recibidos,
+                        st.session_state.pdfs_recibidos,
+                        st.session_state.claves_recibidos,
+                    ) = result
+
                 if st.session_state.df_recibidos is not None:
-                    st.success(f"✅ {len(st.session_state.df_recibidos)} conceptos procesados")
-                    st.success(f"📄 {len(st.session_state.pdfs_recibidos)} PDFs generados")
-                    st.success(f"🔑 {len(st.session_state.claves_recibidos)} claves de productos/servicios encontradas")
-        
+                    st.success(
+                        f"✅ {len(st.session_state.df_recibidos)} conceptos procesados"
+                    )
+                    st.success(
+                        f"📄 {len(st.session_state.pdfs_recibidos)} PDFs generados"
+                    )
+                    st.success(
+                        f"🔑 {len(st.session_state.claves_recibidos)} claves de productos/servicios encontradas"
+                    )
+
         if st.session_state.df_recibidos is not None:
             # Checklist de deducibilidad
-            if 'claves_recibidos' in st.session_state and st.session_state.claves_recibidos:
+            if (
+                "claves_recibidos" in st.session_state
+                and st.session_state.claves_recibidos
+            ):
                 st.subheader("✅ Seleccionar Servicios Deducibles")
-                
+
                 with st.expander("Configurar Deducibilidad", expanded=True):
-                    st.info("💡 Selecciona las claves de productos/servicios que son deducibles de impuestos:")
-                    
+                    st.info(
+                        "💡 Selecciona las claves de productos/servicios que son deducibles de impuestos:"
+                    )
+
                     # Crear columnas para mostrar las claves organizadamente
                     n_claves = len(st.session_state.claves_recibidos)
                     n_cols = min(3, n_claves)  # Máximo 3 columnas
                     cols = st.columns(n_cols)
-                    
+
                     selected_claves = []
                     for i, clave in enumerate(st.session_state.claves_recibidos):
                         col_idx = i % n_cols
                         with cols[col_idx]:
                             if st.checkbox(f"🔑 {clave}", key=f"clave_rec_{clave}"):
                                 selected_claves.append(clave)
-                    
-                    if st.button("💾 Aplicar Configuración de Deducibilidad", key="apply_deduct_rec"):
+
+                    if st.button(
+                        "💾 Aplicar Configuración de Deducibilidad",
+                        key="apply_deduct_rec",
+                    ):
                         with st.spinner("Aplicando configuración..."):
                             # Aplicar el filtro de deducibilidad
                             st.session_state.df_recibidos = apply_deducibility_filter(
                                 st.session_state.df_recibidos, selected_claves
                             )
-                            st.success(f"✅ Configuración aplicada: {len(selected_claves)} claves marcadas como deducibles")
+                            st.success(
+                                f"✅ Configuración aplicada: {len(selected_claves)} claves marcadas como deducibles"
+                            )
                             # Usar tiempo corto para evitar bucles infinitos
                             import time
+
                             time.sleep(0.5)
                         st.rerun()
-            
+
             # Filtros de datos
             df_filtered = st.session_state.df_recibidos
-            
+
             # Calculadora de CFDIs
             create_data_calculator_ui(df_filtered, "recibidos")
-            
+
             # Mostrar métricas
             st.subheader("📊 Resumen Recibidos")
             col1, col2, col3, col4 = st.columns(4)
-            
+
             with col1:
-                st.metric("CFDIs Únicos", len(df_filtered['UUID'].unique()))
+                st.metric("CFDIs Únicos", len(df_filtered["UUID"].unique()))
             with col2:
                 st.metric("Total Conceptos", len(df_filtered))
             with col3:
-                total_ingresos = df_filtered['Ingresos_Subtotal'].sum()
-                total_egresos = df_filtered['Egresos_Subtotal'].sum()
-                st.metric("Ingresos/Egresos", f"${(total_ingresos + total_egresos):,.2f}")
+                total_ingresos = df_filtered["Ingresos_Subtotal"].sum()
+                total_egresos = df_filtered["Egresos_Subtotal"].sum()
+                st.metric(
+                    "Ingresos/Egresos", f"${(total_ingresos + total_egresos):,.2f}"
+                )
             with col4:
-                total_iva = (df_filtered['Ingresos_IVA'].sum() + 
-                           df_filtered['Egresos_IVA'].sum())
+                total_iva = (
+                    df_filtered["Ingresos_IVA"].sum() + df_filtered["Egresos_IVA"].sum()
+                )
                 st.metric("Total IVA", f"${total_iva:,.2f}")
-            
+
             # Mostrar métricas adicionales de deducibilidad
-            if 'Deducible' in df_filtered.columns:
+            if "Deducible" in df_filtered.columns:
                 col5, col6 = st.columns(2)
                 with col5:
-                    deducibles = df_filtered[df_filtered['Deducible'] == True]
-                    st.metric("💰 Gastos Deducibles", f"${deducibles['Monto_Concepto'].sum():,.2f}")
+                    deducibles = df_filtered[df_filtered["Deducible"] == True]
+                    st.metric(
+                        "💰 Gastos Deducibles",
+                        f"${deducibles['Monto_Concepto'].sum():,.2f}",
+                    )
                 with col6:
-                    st.metric("📊 % Deducible", f"{len(deducibles)/len(df_filtered)*100:.1f}%")
-            
+                    st.metric(
+                        "📊 % Deducible",
+                        f"{len(deducibles) / len(df_filtered) * 100:.1f}%",
+                    )
+
             # Mostrar datos filtrados
             st.subheader("📋 Datos Detallados")
             st.dataframe(df_filtered, use_container_width=True, height=300)
-            
+
             # Exportación personalizada - Simplificada en botones tradicionales
-            
+
             # Botones de descarga tradicionales
             st.subheader("📥 Descargas Tradicionales")
             col1, col2 = st.columns(2)
-            
+
             with col1:
-                excel_data = create_enhanced_excel(df_filtered, "Recibidos", "Recibidos")
+                excel_data = create_enhanced_excel(
+                    df_filtered, "Recibidos", "Recibidos"
+                )
                 if excel_data:
                     st.download_button(
                         label="📊 Descargar Excel Completo",
                         data=excel_data,
                         file_name="CFDIs_Recibidos_Completo.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     )
-            
+
             with col2:
                 if st.session_state.pdfs_recibidos:
                     merged_pdf = merge_pdfs(st.session_state.pdfs_recibidos)
@@ -1523,154 +1790,184 @@ def main():
                             label="📄 Descargar PDF Consolidado",
                             data=merged_pdf,
                             file_name="CFDIs_Recibidos_Consolidado.pdf",
-                            mime="application/pdf"
+                            mime="application/pdf",
                         )
-    
+
     with tab3:
         st.header("📊 Resumen Consolidado")
-        
-        if st.session_state.df_emitidos is not None or st.session_state.df_recibidos is not None:
+
+        if (
+            st.session_state.df_emitidos is not None
+            or st.session_state.df_recibidos is not None
+        ):
             # Crear DataFrame consolidado
             df_consolidado = pd.DataFrame()
-            
+
             if st.session_state.df_emitidos is not None:
-                df_consolidado = pd.concat([df_consolidado, st.session_state.df_emitidos], ignore_index=True)
-            
+                df_consolidado = pd.concat(
+                    [df_consolidado, st.session_state.df_emitidos], ignore_index=True
+                )
+
             if st.session_state.df_recibidos is not None:
-                df_consolidado = pd.concat([df_consolidado, st.session_state.df_recibidos], ignore_index=True)
-            
+                df_consolidado = pd.concat(
+                    [df_consolidado, st.session_state.df_recibidos], ignore_index=True
+                )
+
             if not df_consolidado.empty:
                 # Métricas consolidadas
                 col1, col2, col3, col4 = st.columns(4)
-                
+
                 with col1:
-                    st.metric("Total CFDIs", len(df_consolidado['UUID'].unique()))
+                    st.metric("Total CFDIs", len(df_consolidado["UUID"].unique()))
                 with col2:
                     st.metric("Total Conceptos", len(df_consolidado))
                 with col3:
-                    total_ingresos = df_consolidado['Ingresos_Subtotal'].sum()
+                    total_ingresos = df_consolidado["Ingresos_Subtotal"].sum()
                     st.metric("Total Ingresos", f"${total_ingresos:,.2f}")
                 with col4:
-                    total_egresos = df_consolidado['Egresos_Subtotal'].sum()
+                    total_egresos = df_consolidado["Egresos_Subtotal"].sum()
                     st.metric("Total Egresos", f"${total_egresos:,.2f}")
-                
+
                 # Gráfico interactivo mejorado
                 st.subheader("📈 Análisis Temporal Interactivo")
-                
+
                 # Convertir fechas para el gráfico
-                if 'Fecha' in df_consolidado.columns and not df_consolidado['Fecha'].isna().all():
+                if (
+                    "Fecha" in df_consolidado.columns
+                    and not df_consolidado["Fecha"].isna().all()
+                ):
                     df_grafico = df_consolidado.copy()
-                    
+
                     # Convertir fecha a datetime
-                    df_grafico['Fecha_dt'] = pd.to_datetime(df_grafico['Fecha'], format='%d/%m/%Y', errors='coerce')
-                    df_grafico = df_grafico.dropna(subset=['Fecha_dt'])
-                    
+                    df_grafico["Fecha_dt"] = pd.to_datetime(
+                        df_grafico["Fecha"], format="%d/%m/%Y", errors="coerce"
+                    )
+                    df_grafico = df_grafico.dropna(subset=["Fecha_dt"])
+
                     if not df_grafico.empty:
                         # Controles para el gráfico
                         col_graf1, col_graf2 = st.columns(2)
-                        
+
                         with col_graf1:
                             metrica_grafico = st.selectbox(
                                 "¿Qué quieres visualizar?",
                                 options=[
                                     "Ingresos_Subtotal",
-                                    "Egresos_Subtotal", 
+                                    "Egresos_Subtotal",
                                     "Ingresos_IVA",
                                     "Egresos_IVA",
                                     "Total_CFDI",
-                                    "Monto_Concepto"
+                                    "Monto_Concepto",
                                 ],
                                 format_func=lambda x: {
                                     "Ingresos_Subtotal": "💰 Ingresos (Subtotal)",
                                     "Egresos_Subtotal": "💸 Egresos (Subtotal)",
-                                    "Ingresos_IVA": "📊 IVA Ingresos", 
+                                    "Ingresos_IVA": "📊 IVA Ingresos",
                                     "Egresos_IVA": "📊 IVA Egresos",
                                     "Total_CFDI": "🧾 Total CFDIs",
-                                    "Monto_Concepto": "💵 Monto por Concepto"
-                                }.get(x, str(x))
+                                    "Monto_Concepto": "💵 Monto por Concepto",
+                                }.get(x, str(x)),
                             )
-                        
+
                         with col_graf2:
                             agrupar_por = st.selectbox(
                                 "Agrupar por:",
                                 options=["Día", "Semana", "Mes"],
-                                index=2  # Por defecto "Mes"
+                                index=2,  # Por defecto "Mes"
                             )
-                        
+
                         # Agrupar datos según selección
                         if agrupar_por == "Día":
-                            df_grafico['Periodo'] = df_grafico['Fecha_dt'].dt.strftime('%Y-%m-%d')
+                            df_grafico["Periodo"] = df_grafico["Fecha_dt"].dt.strftime(
+                                "%Y-%m-%d"
+                            )
                         elif agrupar_por == "Semana":
-                            df_grafico['Periodo'] = df_grafico['Fecha_dt'].dt.to_period('W').astype(str)
+                            df_grafico["Periodo"] = (
+                                df_grafico["Fecha_dt"].dt.to_period("W").astype(str)
+                            )
                         else:  # Mes
-                            df_grafico['Periodo'] = df_grafico['Fecha_dt'].dt.strftime('%Y-%m')
-                        
+                            df_grafico["Periodo"] = df_grafico["Fecha_dt"].dt.strftime(
+                                "%Y-%m"
+                            )
+
                         # Crear datos agregados
-                        datos_agregados = df_grafico.groupby(['Periodo', 'Categoria']).agg({
-                            metrica_grafico: 'sum'
-                        }).reset_index()
-                        
+                        datos_agregados = (
+                            df_grafico.groupby(["Periodo", "Categoria"])
+                            .agg({metrica_grafico: "sum"})
+                            .reset_index()
+                        )
+
                         if not datos_agregados.empty:
                             try:
                                 import plotly.express as px
-                                
+
                                 fig = px.line(
                                     datos_agregados,
-                                    x='Periodo',
+                                    x="Periodo",
                                     y=metrica_grafico,
-                                    color='Categoria',
+                                    color="Categoria",
                                     title=f"Evolución de {metrica_grafico.replace('_', ' ')} por {agrupar_por}",
-                                    markers=True
+                                    markers=True,
                                 )
-                                
+
                                 # Mejorar el diseño
                                 fig.update_layout(
                                     xaxis_title=f"Periodo ({agrupar_por})",
                                     yaxis_title="Monto ($)",
-                                    hovermode='x unified'
+                                    hovermode="x unified",
                                 )
-                                
+
                                 st.plotly_chart(fig, use_container_width=True)
-                                
+
                                 # Gráfico adicional de barras
                                 fig_bar = px.bar(
                                     datos_agregados,
-                                    x='Periodo',
+                                    x="Periodo",
                                     y=metrica_grafico,
-                                    color='Categoria',
+                                    color="Categoria",
                                     title=f"Comparación por {agrupar_por} - {metrica_grafico.replace('_', ' ')}",
-                                    barmode='group'
+                                    barmode="group",
                                 )
-                                
+
                                 st.plotly_chart(fig_bar, use_container_width=True)
-                                
+
                             except ImportError:
-                                st.warning("📊 Para gráficos avanzados, instala plotly: pip install plotly")
+                                st.warning(
+                                    "📊 Para gráficos avanzados, instala plotly: pip install plotly"
+                                )
                                 # Gráfico básico con Streamlit
-                                st.line_chart(datos_agregados.set_index('Periodo')[metrica_grafico])
-                
+                                st.line_chart(
+                                    datos_agregados.set_index("Periodo")[
+                                        metrica_grafico
+                                    ]
+                                )
+
                 # Tabla resumen
                 st.subheader("📋 Tabla Resumen")
                 st.dataframe(df_consolidado, use_container_width=True, height=400)
-                
+
                 # Descargas consolidadas
                 st.subheader("💾 Descargas Consolidadas")
                 col1, col2, col3 = st.columns(3)
-                
+
                 with col1:
                     # Excel consolidado
-                    excel_consolidado = create_enhanced_excel(df_consolidado, "Consolidado", "Todos")
+                    excel_consolidado = create_enhanced_excel(
+                        df_consolidado, "Consolidado", "Todos"
+                    )
                     if excel_consolidado:
                         st.download_button(
                             label="📊 Excel Consolidado",
                             data=excel_consolidado,
                             file_name="CFDIs_Consolidado_Completo.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         )
-                
+
                 with col2:
                     # PDF consolidado de todos
-                    all_pdfs = st.session_state.pdfs_emitidos + st.session_state.pdfs_recibidos
+                    all_pdfs = (
+                        st.session_state.pdfs_emitidos + st.session_state.pdfs_recibidos
+                    )
                     if all_pdfs:
                         merged_all_pdf = merge_pdfs(all_pdfs)
                         if merged_all_pdf:
@@ -1678,9 +1975,9 @@ def main():
                                 label="📄 PDF Consolidado Total",
                                 data=merged_all_pdf,
                                 file_name="CFDIs_Todos_Consolidado.pdf",
-                                mime="application/pdf"
+                                mime="application/pdf",
                             )
-                
+
                 with col3:
                     # Mostrar estadísticas adicionales
                     st.info(f"""
@@ -1698,7 +1995,7 @@ def main():
             3. Haz clic en **Procesar**
             4. Regresa aquí para ver el consolidado
             """)
-    
+
     with tab4:
         create_diot_interface()
 
@@ -1708,5 +2005,5 @@ if __name__ == "__main__":
         import plotly.express as px
     except ImportError:
         st.error("Por favor instala plotly: pip install plotly")
-    
+
     main()
